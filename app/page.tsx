@@ -31,7 +31,9 @@ import {
   LayoutGrid,
   ChevronRight,
   ArrowRight,
-  Sparkle
+  Sparkle,
+  Settings,
+  Sliders
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { INITIAL_PROJECTS, Project, Task } from "@/lib/initial-projects";
@@ -79,12 +81,26 @@ export default function Home() {
   // Notifications
   const [notification, setNotification] = useState<{ message: string; type: "success" | "error" | "info" } | null>(null);
 
+  // System Settings States
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [userName, setUserName] = useState("Desenvolvedor");
+  const [aiPersona, setAiPersona] = useState("mentor"); // "mentor" | "minimalist" | "scrum" | "creative"
+  const [defaultViewMode, setDefaultViewMode] = useState<"bento" | "kanban" | "list">("bento");
+
+  const [tempUserName, setTempUserName] = useState("");
+  const [tempAiPersona, setTempAiPersona] = useState("mentor");
+  const [tempDefaultViewMode, setTempDefaultViewMode] = useState<"bento" | "kanban" | "list">("bento");
+
   // New task input (within details drawer)
   const [newTaskTitle, setNewTaskTitle] = useState("");
 
   // Load projects from localStorage or use initial projects
   useEffect(() => {
     const saved = localStorage.getItem("project_hub_projects");
+    const savedName = localStorage.getItem("project_hub_username");
+    const savedPersona = localStorage.getItem("project_hub_ai_persona");
+    const savedView = localStorage.getItem("project_hub_default_view");
+
     const timer = setTimeout(() => {
       if (saved) {
         try {
@@ -95,6 +111,13 @@ export default function Home() {
       } else {
         setProjects(INITIAL_PROJECTS);
         localStorage.setItem("project_hub_projects", JSON.stringify(INITIAL_PROJECTS));
+      }
+
+      if (savedName) setUserName(savedName);
+      if (savedPersona) setAiPersona(savedPersona);
+      if (savedView) {
+        setDefaultViewMode(savedView as any);
+        setViewMode(savedView as any);
       }
     }, 0);
     return () => clearTimeout(timer);
@@ -283,6 +306,7 @@ export default function Home() {
           projectTitle: proj.title,
           projectDescription: proj.description,
           tags: proj.tags,
+          aiPersona: aiPersona,
         }),
       });
 
@@ -498,6 +522,36 @@ export default function Home() {
     }
   };
 
+  // System Settings Actions
+  const handleSaveSettings = (name: string, persona: string, view: "bento" | "kanban" | "list") => {
+    const cleanName = name.trim() || "Desenvolvedor";
+    setUserName(cleanName);
+    setAiPersona(persona);
+    setDefaultViewMode(view);
+    setViewMode(view);
+    localStorage.setItem("project_hub_username", cleanName);
+    localStorage.setItem("project_hub_ai_persona", persona);
+    localStorage.setItem("project_hub_default_view", view);
+    showToast("Configurações do sistema salvas com sucesso!", "success");
+    setIsSettingsModalOpen(false);
+  };
+
+  const handleResetSystem = () => {
+    if (confirm("ATENÇÃO: Isso irá apagar todos os seus projetos e redefinir o sistema para o estado original de fábrica. Deseja continuar?")) {
+      localStorage.removeItem("project_hub_projects");
+      localStorage.removeItem("project_hub_username");
+      localStorage.removeItem("project_hub_ai_persona");
+      localStorage.removeItem("project_hub_default_view");
+      setProjects(INITIAL_PROJECTS);
+      setUserName("Desenvolvedor");
+      setAiPersona("mentor");
+      setViewMode("bento");
+      setDefaultViewMode("bento");
+      showToast("Sistema redefinido com sucesso!", "info");
+      setIsSettingsModalOpen(false);
+    }
+  };
+
   // Helper Labels & Styles
   const getStatusLabel = (status: Project["status"]) => {
     switch (status) {
@@ -618,7 +672,7 @@ export default function Home() {
               </span>
             </h1>
             <p className="text-xs text-slate-400 font-mono">
-              Organize seus fluxos com inteligência e simplicidade
+              Olá, <span className="text-slate-800 font-bold">{userName}</span>! Pronto para organizar seus fluxos hoje?
             </p>
           </div>
         </div>
@@ -649,6 +703,20 @@ export default function Home() {
               />
             </label>
           </div>
+
+          <button
+            onClick={() => {
+              setTempUserName(userName);
+              setTempAiPersona(aiPersona);
+              setTempDefaultViewMode(defaultViewMode);
+              setIsSettingsModalOpen(true);
+            }}
+            title="Configurações do Sistema"
+            className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition-all border border-slate-200/60 flex items-center gap-1.5 text-xs font-medium"
+          >
+            <Settings className="w-4 h-4" />
+            <span className="hidden sm:inline">Configurar</span>
+          </button>
 
           <button
             onClick={() => setIsNewProjectModalOpen(true)}
@@ -1972,6 +2040,205 @@ export default function Home() {
               </motion.div>
             </div>
 
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: CONFIGURAÇÕES DO SISTEMA */}
+      <AnimatePresence>
+        {isSettingsModalOpen && (
+          <div className="fixed inset-0 z-50 overflow-y-auto" id="settings-modal">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsSettingsModalOpen(false)}
+              className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm"
+            />
+
+            {/* Modal Container */}
+            <div className="flex min-h-screen items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 15 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 15 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className="relative w-full max-w-lg overflow-hidden rounded-2xl bg-white border border-slate-100 p-6 shadow-2xl space-y-6 z-10"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-slate-100 text-slate-800 flex items-center justify-center">
+                      <Settings className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-900 font-sans">
+                        Configurações do Sistema
+                      </h3>
+                      <p className="text-[10px] text-slate-400 font-mono">
+                        Personalize suas preferências do Project Hub
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setIsSettingsModalOpen(false)}
+                    className="p-1 hover:bg-slate-100 rounded-md text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Body Form */}
+                <div className="space-y-5 text-left">
+                  {/* Nome do usuário */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block">
+                      Nome de Usuário (Saudação)
+                    </label>
+                    <input
+                      type="text"
+                      value={tempUserName}
+                      onChange={(e) => setTempUserName(e.target.value)}
+                      placeholder="Ex: João Silva"
+                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-slate-400 shadow-sm transition-colors"
+                    />
+                    <p className="text-[10px] text-slate-400 leading-normal">
+                      Exibido como saudação personalizada no cabeçalho principal do aplicativo.
+                    </p>
+                  </div>
+
+                  {/* Foco do Mentor Técnico (AI Persona) */}
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block">
+                      Persona do Mentor Técnico IA (Gemini)
+                    </label>
+                    
+                    <div className="grid grid-cols-2 gap-2">
+                      {/* Mentor Tradicional */}
+                      <button
+                        type="button"
+                        onClick={() => setTempAiPersona("mentor")}
+                        className={`p-2.5 rounded-lg border text-left transition-all ${
+                          tempAiPersona === "mentor"
+                            ? "border-slate-900 bg-slate-900/5 ring-1 ring-slate-900"
+                            : "border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        <span className="text-[11px] font-bold text-slate-800 block">Tradicional / PM</span>
+                        <span className="text-[9px] text-slate-400 leading-normal block mt-0.5">Visão equilibrada de produto e arquitetura técnica.</span>
+                      </button>
+
+                      {/* Mentor Lean/Minimalista */}
+                      <button
+                        type="button"
+                        onClick={() => setTempAiPersona("minimalist")}
+                        className={`p-2.5 rounded-lg border text-left transition-all ${
+                          tempAiPersona === "minimalist"
+                            ? "border-slate-900 bg-slate-900/5 ring-1 ring-slate-900"
+                            : "border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        <span className="text-[11px] font-bold text-slate-800 block">Lean / MVP</span>
+                        <span className="text-[9px] text-slate-400 leading-normal block mt-0.5">Foco extremo em simplicidade e agilidade, cortando excessos.</span>
+                      </button>
+
+                      {/* Scrum Master */}
+                      <button
+                        type="button"
+                        onClick={() => setTempAiPersona("scrum")}
+                        className={`p-2.5 rounded-lg border text-left transition-all ${
+                          tempAiPersona === "scrum"
+                            ? "border-slate-900 bg-slate-900/5 ring-1 ring-slate-900"
+                            : "border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        <span className="text-[11px] font-bold text-slate-800 block">Scrum Master</span>
+                        <span className="text-[9px] text-slate-400 leading-normal block mt-0.5">Planejamento focado em sprints rápidas e incrementos.</span>
+                      </button>
+
+                      {/* Inovador Criativo */}
+                      <button
+                        type="button"
+                        onClick={() => setTempAiPersona("creative")}
+                        className={`p-2.5 rounded-lg border text-left transition-all ${
+                          tempAiPersona === "creative"
+                            ? "border-slate-900 bg-slate-900/5 ring-1 ring-slate-900"
+                            : "border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        <span className="text-[11px] font-bold text-slate-800 block">Inovação UX</span>
+                        <span className="text-[9px] text-slate-400 leading-normal block mt-0.5">Sugere diferenciais competitivos e design de alta qualidade.</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Visualização padrão inicial */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block">
+                      Visualização Inicial Padrão
+                    </label>
+                    <div className="flex bg-slate-100 rounded-lg p-0.5 border border-slate-200/50">
+                      {(["bento", "kanban", "list"] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          type="button"
+                          onClick={() => setTempDefaultViewMode(mode)}
+                          className={`flex-1 text-center py-1.5 text-xs font-semibold rounded-md transition-all uppercase tracking-wider ${
+                            tempDefaultViewMode === mode
+                              ? "bg-white text-slate-900 shadow-sm"
+                              : "text-slate-500 hover:text-slate-800"
+                          }`}
+                        >
+                          {mode === "bento" ? "Bento" : mode === "kanban" ? "Kanban" : "Lista"}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-slate-400 leading-normal">
+                      A visualização preferida que será aplicada automaticamente ao carregar o Project Hub.
+                    </p>
+                  </div>
+
+                  {/* Seção de perigo/backup adicional */}
+                  <div className="pt-4 border-t border-slate-100 space-y-2.5">
+                    <label className="text-[10px] font-mono font-bold text-red-500 uppercase tracking-wider block">
+                      Gerenciamento de Sistema e Perigo
+                    </label>
+                    <div className="bg-red-50/40 border border-red-100 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <span className="text-[11px] font-bold text-red-800 block">Zerar Dados de Fábrica</span>
+                        <span className="text-[9px] text-red-500/80 leading-normal block mt-0.5">Apaga permanentemente todos os projetos e restaura as configurações originais.</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleResetSystem}
+                        className="bg-red-600 hover:bg-red-700 active:scale-95 text-white text-xs font-semibold px-3 py-1.5 rounded-lg shadow-sm transition-all shrink-0 uppercase tracking-wider"
+                      >
+                        Resetar Sistema
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer Buttons */}
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100">
+                  <button
+                    type="button"
+                    onClick={() => setIsSettingsModalOpen(false)}
+                    className="px-4 py-2 hover:bg-slate-100 rounded-lg text-xs font-bold text-slate-600 transition-colors uppercase tracking-wider"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveSettings(tempUserName, tempAiPersona, tempDefaultViewMode)}
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white rounded-lg text-xs font-bold shadow-sm transition-all uppercase tracking-wider"
+                  >
+                    Salvar Alterações
+                  </button>
+                </div>
+              </motion.div>
+            </div>
           </div>
         )}
       </AnimatePresence>

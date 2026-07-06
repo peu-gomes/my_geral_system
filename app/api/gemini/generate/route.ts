@@ -25,7 +25,7 @@ function getGeminiClient() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { action, projectTitle, projectDescription, tags } = body;
+    const { action, projectTitle, projectDescription, tags, aiPersona } = body;
 
     if (!action) {
       return NextResponse.json(
@@ -41,6 +41,16 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "projectTitle is required for roadmaps" }, { status: 400 });
       }
 
+      // Dynamic system instructions based on AI persona settings
+      let systemInstruction = "Você é um mentor técnico sênior e gerente de produtos. Suas respostas devem ser profissionais, extremamente práticas, realistas, motivadoras e estruturadas em formato JSON estrito em português do Brasil.";
+      if (aiPersona === "minimalist") {
+        systemInstruction = "Você é um mentor técnico focado na filosofia Lean Startup e Minimalismo Extremo. Seu objetivo é ajudar o usuário a reduzir o escopo de seu projeto ao máximo, eliminando 'desperdícios' e criando o MVP mais enxuto e funcional para validação imediata. Destaque tarefas estritamente cruciais e evite super-engenharia.";
+      } else if (aiPersona === "scrum") {
+        systemInstruction = "Você é um Scrum Master e Agile Coach sênior. Suas tarefas devem ser organizadas simulando entregáveis ágeis de Sprints incrementais curtas e focadas em entregas consistentes a cada fase. Use terminologias ágeis profissionais como Sprints, Backlog, DoD e incrementos.";
+      } else if (aiPersona === "creative") {
+        systemInstruction = "Você é um Product Designer e Diretor de Inovação criativa. Suas sugestões devem encorajar ideias inovadoras, diferenciais de mercado, design emocional e de usabilidade encantadores ('wow factor') e recursos ricos adicionais focados na experiência do usuário.";
+      }
+
       const prompt = `Crie um planejamento/roadmap detalhado e minimalista para o seguinte projeto:
 Título: ${projectTitle}
 Descrição original: ${projectDescription || "Sem descrição fornecida."}
@@ -52,7 +62,7 @@ Por favor, gere uma lista de 5 a 8 tarefas cruciais em sequência lógica para t
         model: "gemini-3.5-flash",
         contents: prompt,
         config: {
-          systemInstruction: "Você é um mentor técnico sênior e gerente de produtos. Suas respostas devem ser profissionais, extremamente práticas, realistas, motivadoras e estruturadas em formato JSON estrito em português do Brasil.",
+          systemInstruction,
           responseMimeType: "application/json",
           responseSchema: {
             type: Type.OBJECT,
