@@ -1,8 +1,37 @@
 @import "tailwindcss";
 
+:root {
+  --bg-primary: #fcfcfc;
+  --bg-card: #ffffff;
+  --bg-secondary: #f8fafc;
+  --border-color: #f1f5f9;
+  --border-color-muted: #e2e8f0;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+}
+
+.dark {
+  --bg-primary: #030712;
+  --bg-card: #0b0f19;
+  --bg-secondary: #111827;
+  --border-color: #1f2937;
+  --border-color-muted: #374151;
+  --text-primary: #f9fafb;
+  --text-secondary: #cbd5e1;
+  --text-muted: #6b7280;
+}
+
 @theme {
   --font-sans: var(--font-sans), sans-serif;
   --font-mono: var(--font-mono), monospace;
+}
+
+/* Base Body adaptation */
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 
 /* Custom scrollbars for a clean look */
@@ -22,4 +51,151 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: #cbd5e1;
+}
+
+/* DARK MODE OVERRIDES */
+.dark {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+.dark body {
+  background-color: var(--bg-primary) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Background overrides */
+.dark .bg-white {
+  background-color: var(--bg-card) !important;
+}
+.dark .bg-slate-50 {
+  background-color: var(--bg-secondary) !important;
+}
+.dark .bg-slate-100 {
+  background-color: var(--border-color) !important;
+}
+.dark .bg-slate-200 {
+  background-color: var(--border-color-muted) !important;
+}
+.dark .bg-[#fcfcfc] {
+  background-color: var(--bg-primary) !important;
+}
+
+/* Special Button elements */
+.dark .bg-slate-900 {
+  background-color: #1e293b !important;
+  color: #f9fafb !important;
+}
+.dark .bg-slate-900:hover {
+  background-color: #334155 !important;
+}
+
+/* Backdrop Overlay */
+.dark .bg-slate-900\/40 {
+  background-color: rgba(3, 7, 18, 0.6) !important;
+}
+
+/* Text overrides */
+.dark .text-slate-900,
+.dark .text-slate-800,
+.dark .text-slate-700 {
+  color: var(--text-primary) !important;
+}
+.dark .text-slate-600,
+.dark .text-slate-500 {
+  color: var(--text-secondary) !important;
+}
+.dark .text-slate-400,
+.dark .text-slate-300 {
+  color: var(--text-muted) !important;
+}
+
+/* Border overrides */
+.dark .border-slate-100,
+.dark .border-slate-100\/80,
+.dark .border-slate-200\/50,
+.dark .border-slate-200\/60 {
+  border-color: var(--border-color) !important;
+}
+.dark .border-slate-200,
+.dark .border-slate-300 {
+  border-color: var(--border-color-muted) !important;
+}
+
+/* Hover effects */
+.dark .hover\:bg-slate-50:hover {
+  background-color: var(--bg-secondary) !important;
+}
+.dark .hover\:bg-slate-100:hover {
+  background-color: var(--border-color) !important;
+}
+.dark .hover\:bg-slate-200:hover {
+  background-color: var(--border-color-muted) !important;
+}
+.dark .hover\:text-slate-900:hover {
+  color: var(--text-primary) !important;
+}
+
+/* Form controls */
+.dark input,
+.dark textarea,
+.dark select {
+  background-color: var(--bg-secondary) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-color-muted) !important;
+}
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: var(--text-muted) !important;
+}
+
+/* Scrollbars in dark mode */
+.dark ::-webkit-scrollbar-thumb {
+  background: var(--border-color-muted);
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* High contrast alerts and badge accents in dark mode */
+.dark .bg-emerald-50 {
+  background-color: rgba(16, 185, 129, 0.1) !important;
+  color: #34d399 !important;
+}
+.dark .text-emerald-700 {
+  color: #34d399 !important;
+}
+.dark .bg-amber-50 {
+  background-color: rgba(245, 158, 11, 0.1) !important;
+  color: #fbbf24 !important;
+}
+.dark .text-amber-700 {
+  color: #fbbf24 !important;
+}
+.dark .bg-rose-50, .dark .bg-red-50 {
+  background-color: rgba(239, 68, 68, 0.1) !important;
+  color: #f87171 !important;
+}
+.dark .text-rose-700, .dark .text-red-700 {
+  color: #f87171 !important;
+}
+.dark .bg-indigo-50 {
+  background-color: rgba(99, 102, 241, 0.1) !important;
+  color: #818cf8 !important;
+}
+.dark .text-indigo-700, .dark .text-indigo-900 {
+  color: #818cf8 !important;
+}
+.dark .bg-indigo-50\/30 {
+  background-color: rgba(99, 102, 241, 0.05) !important;
+}
+.dark .border-indigo-100\/50, .dark .border-indigo-100 {
+  border-color: rgba(99, 102, 241, 0.2) !important;
+}
+.dark .bg-sky-50 {
+  background-color: rgba(14, 165, 233, 0.1) !important;
+  color: #38bdf8 !important;
+}
+.dark .text-sky-700 {
+  color: #38bdf8 !important;
 }

@@ -33,7 +33,9 @@ import {
   ArrowRight,
   Sparkle,
   Settings,
-  Sliders
+  Sliders,
+  Sun,
+  Moon
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { INITIAL_PROJECTS, Project, Task } from "@/lib/initial-projects";
@@ -86,10 +88,12 @@ export default function Home() {
   const [userName, setUserName] = useState("Desenvolvedor");
   const [aiPersona, setAiPersona] = useState("mentor"); // "mentor" | "minimalist" | "scrum" | "creative"
   const [defaultViewMode, setDefaultViewMode] = useState<"bento" | "kanban" | "list">("bento");
+  const [theme, setTheme] = useState<"light" | "dark">("light");
 
   const [tempUserName, setTempUserName] = useState("");
   const [tempAiPersona, setTempAiPersona] = useState("mentor");
   const [tempDefaultViewMode, setTempDefaultViewMode] = useState<"bento" | "kanban" | "list">("bento");
+  const [tempTheme, setTempTheme] = useState<"light" | "dark">("light");
 
   // New task input (within details drawer)
   const [newTaskTitle, setNewTaskTitle] = useState("");
@@ -100,6 +104,7 @@ export default function Home() {
     const savedName = localStorage.getItem("project_hub_username");
     const savedPersona = localStorage.getItem("project_hub_ai_persona");
     const savedView = localStorage.getItem("project_hub_default_view");
+    const savedTheme = localStorage.getItem("project_hub_theme");
 
     const timer = setTimeout(() => {
       if (saved) {
@@ -119,9 +124,24 @@ export default function Home() {
         setDefaultViewMode(savedView as any);
         setViewMode(savedView as any);
       }
+      if (savedTheme) {
+        setTheme(savedTheme as "light" | "dark");
+      } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
+        setTheme("dark");
+      }
     }, 0);
     return () => clearTimeout(timer);
   }, []);
+
+  // Sync theme with DOM and localStorage
+  useEffect(() => {
+    if (theme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+    localStorage.setItem("project_hub_theme", theme);
+  }, [theme]);
 
   // Sync projects to localStorage on change
   const saveProjects = (updatedProjects: Project[]) => {
@@ -523,15 +543,17 @@ export default function Home() {
   };
 
   // System Settings Actions
-  const handleSaveSettings = (name: string, persona: string, view: "bento" | "kanban" | "list") => {
+  const handleSaveSettings = (name: string, persona: string, view: "bento" | "kanban" | "list", themeValue: "light" | "dark") => {
     const cleanName = name.trim() || "Desenvolvedor";
     setUserName(cleanName);
     setAiPersona(persona);
     setDefaultViewMode(view);
     setViewMode(view);
+    setTheme(themeValue);
     localStorage.setItem("project_hub_username", cleanName);
     localStorage.setItem("project_hub_ai_persona", persona);
     localStorage.setItem("project_hub_default_view", view);
+    localStorage.setItem("project_hub_theme", themeValue);
     showToast("Configurações do sistema salvas com sucesso!", "success");
     setIsSettingsModalOpen(false);
   };
@@ -542,11 +564,13 @@ export default function Home() {
       localStorage.removeItem("project_hub_username");
       localStorage.removeItem("project_hub_ai_persona");
       localStorage.removeItem("project_hub_default_view");
+      localStorage.removeItem("project_hub_theme");
       setProjects(INITIAL_PROJECTS);
       setUserName("Desenvolvedor");
       setAiPersona("mentor");
       setViewMode("bento");
       setDefaultViewMode("bento");
+      setTheme("light");
       showToast("Sistema redefinido com sucesso!", "info");
       setIsSettingsModalOpen(false);
     }
@@ -705,10 +729,23 @@ export default function Home() {
           </div>
 
           <button
+            onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+            title={theme === "light" ? "Mudar para Modo Escuro" : "Mudar para Modo Claro"}
+            className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition-all border border-slate-200/60 flex items-center justify-center shadow-sm"
+          >
+            {theme === "light" ? (
+              <Moon className="w-4 h-4 text-slate-700" />
+            ) : (
+              <Sun className="w-4 h-4 text-amber-500" />
+            )}
+          </button>
+
+          <button
             onClick={() => {
               setTempUserName(userName);
               setTempAiPersona(aiPersona);
               setTempDefaultViewMode(defaultViewMode);
+              setTempTheme(theme);
               setIsSettingsModalOpen(true);
             }}
             title="Configurações do Sistema"
@@ -2199,6 +2236,36 @@ export default function Home() {
                     </p>
                   </div>
 
+                  {/* Tema do Sistema */}
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block">
+                      Tema do Sistema
+                    </label>
+                    <div className="flex bg-slate-100 rounded-lg p-0.5 border border-slate-200/50">
+                      {([
+                        { value: "light", label: "Claro", icon: Sun },
+                        { value: "dark", label: "Escuro", icon: Moon }
+                      ] as const).map(({ value, label, icon: Icon }) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setTempTheme(value)}
+                          className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-semibold rounded-md transition-all uppercase tracking-wider ${
+                            tempTheme === value
+                              ? "bg-white text-slate-900 shadow-sm"
+                              : "text-slate-500 hover:text-slate-800"
+                          }`}
+                        >
+                          <Icon className="w-3.5 h-3.5" />
+                          <span>{label}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-slate-400 leading-normal">
+                      Escolha entre o visual claro (padrão elegante) ou o modo escuro imersivo para o Project Hub.
+                    </p>
+                  </div>
+
                   {/* Seção de perigo/backup adicional */}
                   <div className="pt-4 border-t border-slate-100 space-y-2.5">
                     <label className="text-[10px] font-mono font-bold text-red-500 uppercase tracking-wider block">
@@ -2231,7 +2298,7 @@ export default function Home() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleSaveSettings(tempUserName, tempAiPersona, tempDefaultViewMode)}
+                    onClick={() => handleSaveSettings(tempUserName, tempAiPersona, tempDefaultViewMode, tempTheme)}
                     className="px-4 py-2 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white rounded-lg text-xs font-bold shadow-sm transition-all uppercase tracking-wider"
                   >
                     Salvar Alterações
