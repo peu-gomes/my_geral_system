@@ -612,19 +612,72 @@ export default function Home() {
     );
   };
 
-  // Filter & Search computation
-  const filteredProjects = projects.filter((p) => {
-    const matchesSearch = 
-      p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()));
-    
-    const matchesStatus = statusFilter === "all" ? true : p.status === statusFilter;
-    const matchesSource = sourceFilter === "all" ? true : p.source === sourceFilter;
-    const matchesTag = selectedTag ? p.tags.includes(selectedTag) : true;
+  // Helper for relative updated time label
+  const formatRelativeTime = (isoString: string) => {
+    if (!isoString) return "recente";
+    try {
+      const date = new Date(isoString);
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      const diffSecs = Math.max(0, Math.floor(diffMs / 1000));
+      const diffMins = Math.floor(diffSecs / 60);
+      const diffHours = Math.floor(diffMins / 60);
+      const diffDays = Math.floor(diffHours / 24);
 
-    return matchesSearch && matchesStatus && matchesSource && matchesTag;
-  });
+      if (diffSecs < 15) return "agora mesmo";
+      if (diffSecs < 60) return `há ${diffSecs}s`;
+      if (diffMins < 60) return `há ${diffMins} min`;
+      if (diffHours < 24) return `há ${diffHours}h`;
+      if (diffDays === 1) return "ontem";
+      if (diffDays < 7) return `há ${diffDays} dias`;
+      
+      return date.toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric"
+      });
+    } catch {
+      return "recente";
+    }
+  };
+
+  // Filter & Search computation sorted by updatedAt descending
+  const filteredProjects = projects
+    .filter((p) => {
+      const matchesSearch = 
+        p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()));
+      
+      const matchesStatus = statusFilter === "all" ? true : p.status === statusFilter;
+      const matchesSource = sourceFilter === "all" ? true : p.source === sourceFilter;
+      const matchesTag = selectedTag ? p.tags.includes(selectedTag) : true;
+
+      return matchesSearch && matchesStatus && matchesSource && matchesTag;
+    })
+    .sort((a, b) => {
+      const getTimeSafe = (dateStr: string | undefined | null) => {
+        if (!dateStr) return 0;
+        try {
+          const t = new Date(dateStr).getTime();
+          return isNaN(t) ? 0 : t;
+        } catch {
+          return 0;
+        }
+      };
+      
+      const dateA = getTimeSafe(a.updatedAt || a.createdAt);
+      const dateB = getTimeSafe(b.updatedAt || b.createdAt);
+      
+      if (dateB !== dateA) {
+        return dateB - dateA;
+      }
+      
+      // Fallback a data de criacao
+      const createA = getTimeSafe(a.createdAt);
+      const createB = getTimeSafe(b.createdAt);
+      return createB - createA;
+    });
 
   // Calculate generic statistics
   const totalProjectsCount = projects.length;
@@ -1078,6 +1131,10 @@ export default function Home() {
                                 <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
                               </a>
                             )}
+                            {(p.links.github || p.links.deploy || p.links.workspace) && <span className="text-slate-200 text-xs">|</span>}
+                            <span className="text-[10px] font-mono text-slate-400" title={`Atualizado em: ${new Date(p.updatedAt).toLocaleString()}`}>
+                              {formatRelativeTime(p.updatedAt)}
+                            </span>
                           </div>
 
                           <div className="flex items-center gap-2">
@@ -1138,6 +1195,7 @@ export default function Home() {
                           ) : (
                             colProjects.map((p) => (
                               <motion.div
+                                layout
                                 layoutId={p.id}
                                 key={p.id}
                                 className="bg-white border border-slate-200/60 rounded-lg p-4 shadow-2xs hover:shadow-xs transition-shadow relative group"
@@ -1145,34 +1203,41 @@ export default function Home() {
                                 <div className="flex items-center justify-between mb-2">
                                   {getSourceBadge(p.source)}
                                   
-                                  {/* Quick Arrow Movers to easily shift status */}
-                                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    {colStatus !== "planning" && (
-                                      <button
-                                        onClick={() => {
-                                          const prevs: Project["status"][] = ["planning", "in_progress", "completed"];
-                                          const currIdx = prevs.indexOf(colStatus);
-                                          handleMoveStatus(p.id, prevs[currIdx - 1]);
-                                        }}
-                                        title="Mover para esquerda"
-                                        className="p-1 bg-slate-50 hover:bg-slate-100 rounded text-slate-500 hover:text-slate-900 border border-slate-200"
-                                      >
-                                        <ChevronRight className="w-3 h-3 rotate-180" />
-                                      </button>
-                                    )}
-                                    {colStatus !== "completed" && (
-                                      <button
-                                        onClick={() => {
-                                          const nexts: Project["status"][] = ["planning", "in_progress", "completed"];
-                                          const currIdx = nexts.indexOf(colStatus);
-                                          handleMoveStatus(p.id, nexts[currIdx + 1]);
-                                        }}
-                                        title="Mover para direita"
-                                        className="p-1 bg-slate-50 hover:bg-slate-100 rounded text-slate-500 hover:text-slate-900 border border-slate-200"
-                                      >
-                                        <ChevronRight className="w-3 h-3" />
-                                      </button>
-                                    )}
+                                  <div className="flex items-center gap-1.5">
+                                    {/* Relative time indicator, hidden when hover triggers Quick Movers */}
+                                    <span className="text-[10px] font-mono text-slate-400 group-hover:hidden" title={`Atualizado em: ${new Date(p.updatedAt).toLocaleString()}`}>
+                                      {formatRelativeTime(p.updatedAt)}
+                                    </span>
+
+                                    {/* Quick Arrow Movers to easily shift status */}
+                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      {colStatus !== "planning" && (
+                                        <button
+                                          onClick={() => {
+                                            const prevs: Project["status"][] = ["planning", "in_progress", "completed"];
+                                            const currIdx = prevs.indexOf(colStatus);
+                                            handleMoveStatus(p.id, prevs[currIdx - 1]);
+                                          }}
+                                          title="Mover para esquerda"
+                                          className="p-1 bg-slate-50 hover:bg-slate-100 rounded text-slate-500 hover:text-slate-900 border border-slate-200"
+                                        >
+                                          <ChevronRight className="w-3 h-3 rotate-180" />
+                                        </button>
+                                      )}
+                                      {colStatus !== "completed" && (
+                                        <button
+                                          onClick={() => {
+                                            const nexts: Project["status"][] = ["planning", "in_progress", "completed"];
+                                            const currIdx = nexts.indexOf(colStatus);
+                                            handleMoveStatus(p.id, nexts[currIdx + 1]);
+                                          }}
+                                          title="Mover para direita"
+                                          className="p-1 bg-slate-50 hover:bg-slate-100 rounded text-slate-500 hover:text-slate-900 border border-slate-200"
+                                        >
+                                          <ChevronRight className="w-3 h-3" />
+                                        </button>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
 
@@ -1260,6 +1325,9 @@ export default function Home() {
                                   {p.title}
                                 </span>
                               </button>
+                              <span className="text-[10px] font-mono text-slate-400 block mt-0.5" title={`Atualizado em: ${new Date(p.updatedAt).toLocaleString()}`}>
+                                Alterado {formatRelativeTime(p.updatedAt)}
+                              </span>
                             </div>
 
                             {/* Status */}
