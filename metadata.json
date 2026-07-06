@@ -1,0 +1,6 @@
+{
+  "name": "Project Hub",
+  "description": "Um organizador de projetos minimalista, intuitivo e com IA integrada para estruturar suas ideias, criar cronogramas e gerenciar suas tarefas com eficiência.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
