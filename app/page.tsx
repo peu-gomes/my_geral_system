@@ -35,10 +35,20 @@ import {
   Settings,
   Sliders,
   Sun,
-  Moon
+  Moon,
+  AlertTriangle,
+  HelpCircle
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { INITIAL_PROJECTS, Project, Task } from "@/lib/initial-projects";
+import { 
+  getDbProjects, 
+  saveDbProject, 
+  deleteDbProject, 
+  getDbSettings, 
+  saveDbSettings, 
+  seedDbProjects 
+} from "@/lib/firebase-service";
 
 function generateUniqueId(prefix: string): string {
   if (typeof window !== "undefined") {
@@ -98,39 +108,108 @@ export default function Home() {
   // New task input (within details drawer)
   const [newTaskTitle, setNewTaskTitle] = useState("");
 
-  // Load projects from localStorage or use initial projects
-  useEffect(() => {
-    const saved = localStorage.getItem("project_hub_projects");
-    const savedName = localStorage.getItem("project_hub_username");
-    const savedPersona = localStorage.getItem("project_hub_ai_persona");
-    const savedView = localStorage.getItem("project_hub_default_view");
-    const savedTheme = localStorage.getItem("project_hub_theme");
+  // Firestore specific states
+  const [isLoadingDb, setIsLoadingDb] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
 
-    const timer = setTimeout(() => {
-      if (saved) {
-        try {
-          setProjects(JSON.parse(saved));
-        } catch (e) {
+  // Custom Confirmation Dialog State
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    actionLabel: string;
+    onConfirm: () => void | Promise<void>;
+    isDanger?: boolean;
+  }>({
+    isOpen: false,
+    title: "",
+    description: "",
+    actionLabel: "",
+    onConfirm: () => {},
+    isDanger: false,
+  });
+
+  // Load projects from Firestore with localStorage fallback
+  useEffect(() => {
+    async function initData() {
+      setIsLoadingDb(true);
+      try {
+        // 1. Fetch settings from Firestore
+        const dbSettings = await getDbSettings();
+        if (dbSettings) {
+          if (dbSettings.userName) setUserName(dbSettings.userName);
+          if (dbSettings.aiPersona) setAiPersona(dbSettings.aiPersona);
+          if (dbSettings.defaultViewMode) {
+            setDefaultViewMode(dbSettings.defaultViewMode);
+            setViewMode(dbSettings.defaultViewMode);
+          }
+          if (dbSettings.theme) setTheme(dbSettings.theme);
+        } else {
+          // Fallback to local storage if no settings in DB
+          const savedName = localStorage.getItem("project_hub_username");
+          const savedPersona = localStorage.getItem("project_hub_ai_persona");
+          const savedView = localStorage.getItem("project_hub_default_view");
+          const savedTheme = localStorage.getItem("project_hub_theme");
+          if (savedName) setUserName(savedName);
+          if (savedPersona) setAiPersona(savedPersona);
+          if (savedView) {
+            setDefaultViewMode(savedView as any);
+            setViewMode(savedView as any);
+          }
+          if (savedTheme) setTheme(savedTheme as any);
+        }
+
+        // 2. Fetch projects from Firestore
+        let dbProjects = await getDbProjects();
+        if (dbProjects.length === 0) {
+          // No projects in Firestore yet - let's check localStorage
+          const savedProjectsStr = localStorage.getItem("project_hub_projects");
+          let initialSeed = INITIAL_PROJECTS;
+          if (savedProjectsStr) {
+            try {
+              initialSeed = JSON.parse(savedProjectsStr);
+            } catch (e) {
+              initialSeed = INITIAL_PROJECTS;
+            }
+          }
+          // Seed the Firestore with initial projects
+          await seedDbProjects(initialSeed);
+          dbProjects = initialSeed;
+        }
+        setProjects(dbProjects);
+        localStorage.setItem("project_hub_projects", JSON.stringify(dbProjects));
+      } catch (err) {
+        console.error("Failed to load from Firestore, falling back to local storage:", err);
+        // Fallback to local storage
+        const saved = localStorage.getItem("project_hub_projects");
+        const savedName = localStorage.getItem("project_hub_username");
+        const savedPersona = localStorage.getItem("project_hub_ai_persona");
+        const savedView = localStorage.getItem("project_hub_default_view");
+        const savedTheme = localStorage.getItem("project_hub_theme");
+
+        if (saved) {
+          try {
+            setProjects(JSON.parse(saved));
+          } catch (e) {
+            setProjects(INITIAL_PROJECTS);
+          }
+        } else {
           setProjects(INITIAL_PROJECTS);
         }
-      } else {
-        setProjects(INITIAL_PROJECTS);
-        localStorage.setItem("project_hub_projects", JSON.stringify(INITIAL_PROJECTS));
-      }
 
-      if (savedName) setUserName(savedName);
-      if (savedPersona) setAiPersona(savedPersona);
-      if (savedView) {
-        setDefaultViewMode(savedView as any);
-        setViewMode(savedView as any);
+        if (savedName) setUserName(savedName);
+        if (savedPersona) setAiPersona(savedPersona);
+        if (savedView) {
+          setDefaultViewMode(savedView as any);
+          setViewMode(savedView as any);
+        }
+        if (savedTheme) setTheme(savedTheme as any);
+      } finally {
+        setIsLoadingDb(false);
       }
-      if (savedTheme) {
-        setTheme(savedTheme as "light" | "dark");
-      } else if (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) {
-        setTheme("dark");
-      }
-    }, 0);
-    return () => clearTimeout(timer);
+    }
+
+    initData();
   }, []);
 
   // Sync theme with DOM and localStorage
@@ -143,10 +222,21 @@ export default function Home() {
     localStorage.setItem("project_hub_theme", theme);
   }, [theme]);
 
-  // Sync projects to localStorage on change
-  const saveProjects = (updatedProjects: Project[]) => {
+  // Sync projects to localStorage & Firestore in the background
+  const saveProjects = async (updatedProjects: Project[]) => {
+    // Optimistic state update & local cache
     setProjects(updatedProjects);
     localStorage.setItem("project_hub_projects", JSON.stringify(updatedProjects));
+
+    // Save each to Firestore in background
+    try {
+      setIsSyncing(true);
+      await Promise.all(updatedProjects.map(p => saveDbProject(p)));
+    } catch (err) {
+      console.error("Firestore sync error:", err);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const showToast = (message: string, type: "success" | "error" | "info" = "success") => {
@@ -489,13 +579,30 @@ export default function Home() {
     const proj = projects.find((p) => p.id === projectId);
     if (!proj) return;
 
-    if (confirm(`Tem certeza de que deseja excluir o projeto "${proj.title}"?`)) {
-      const updated = projects.filter((p) => p.id !== projectId);
-      saveProjects(updated);
-      setIsDetailsDrawerOpen(false);
-      setSelectedProjectId(null);
-      showToast(`Projeto "${proj.title}" excluído.`);
-    }
+    setConfirmDialog({
+      isOpen: true,
+      title: "Excluir Projeto",
+      description: `Tem certeza de que deseja excluir o projeto "${proj.title}"? Esta ação é permanente e removerá todos os dados do projeto no banco de dados.`,
+      actionLabel: "Excluir",
+      isDanger: true,
+      onConfirm: async () => {
+        const updated = projects.filter((p) => p.id !== projectId);
+        setProjects(updated);
+        localStorage.setItem("project_hub_projects", JSON.stringify(updated));
+        setIsDetailsDrawerOpen(false);
+        setSelectedProjectId(null);
+        showToast(`Projeto "${proj.title}" excluído.`);
+
+        try {
+          setIsSyncing(true);
+          await deleteDbProject(projectId);
+        } catch (err) {
+          console.error("Failed to delete project from Firestore:", err);
+        } finally {
+          setIsSyncing(false);
+        }
+      }
+    });
   };
 
   // Move Project Status (Kanban actions)
@@ -543,7 +650,7 @@ export default function Home() {
   };
 
   // System Settings Actions
-  const handleSaveSettings = (name: string, persona: string, view: "bento" | "kanban" | "list", themeValue: "light" | "dark") => {
+  const handleSaveSettings = async (name: string, persona: string, view: "bento" | "kanban" | "list", themeValue: "light" | "dark") => {
     const cleanName = name.trim() || "Desenvolvedor";
     setUserName(cleanName);
     setAiPersona(persona);
@@ -556,24 +663,67 @@ export default function Home() {
     localStorage.setItem("project_hub_theme", themeValue);
     showToast("Configurações do sistema salvas com sucesso!", "success");
     setIsSettingsModalOpen(false);
+
+    try {
+      setIsSyncing(true);
+      await saveDbSettings({
+        userName: cleanName,
+        aiPersona: persona,
+        defaultViewMode: view,
+        theme: themeValue
+      });
+    } catch (err) {
+      console.error("Error saving settings to Firestore:", err);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   const handleResetSystem = () => {
-    if (confirm("ATENÇÃO: Isso irá apagar todos os seus projetos e redefinir o sistema para o estado original de fábrica. Deseja continuar?")) {
-      localStorage.removeItem("project_hub_projects");
-      localStorage.removeItem("project_hub_username");
-      localStorage.removeItem("project_hub_ai_persona");
-      localStorage.removeItem("project_hub_default_view");
-      localStorage.removeItem("project_hub_theme");
-      setProjects(INITIAL_PROJECTS);
-      setUserName("Desenvolvedor");
-      setAiPersona("mentor");
-      setViewMode("bento");
-      setDefaultViewMode("bento");
-      setTheme("light");
-      showToast("Sistema redefinido com sucesso!", "info");
-      setIsSettingsModalOpen(false);
-    }
+    setConfirmDialog({
+      isOpen: true,
+      title: "Zerar Dados de Fábrica",
+      description: "ATENÇÃO: Isso irá apagar permanentemente todos os seus projetos do banco de dados e localmente, redefinindo o Project Hub para as configurações originais de fábrica. Esta ação não pode ser desfeita. Deseja continuar?",
+      actionLabel: "Redefinir Tudo",
+      isDanger: true,
+      onConfirm: async () => {
+        localStorage.removeItem("project_hub_projects");
+        localStorage.removeItem("project_hub_username");
+        localStorage.removeItem("project_hub_ai_persona");
+        localStorage.removeItem("project_hub_default_view");
+        localStorage.removeItem("project_hub_theme");
+        
+        setProjects(INITIAL_PROJECTS);
+        setUserName("Desenvolvedor");
+        setAiPersona("mentor");
+        setViewMode("bento");
+        setDefaultViewMode("bento");
+        setTheme("light");
+        showToast("Sistema redefinido com sucesso!", "info");
+        setIsSettingsModalOpen(false);
+
+        try {
+          setIsSyncing(true);
+          // Clear all projects in database
+          for (const p of projects) {
+            await deleteDbProject(p.id);
+          }
+          // Seed default projects to Firestore
+          await seedDbProjects(INITIAL_PROJECTS);
+          // Reset config in Firestore
+          await saveDbSettings({
+            userName: "Desenvolvedor",
+            aiPersona: "mentor",
+            defaultViewMode: "bento",
+            theme: "light"
+          });
+        } catch (err) {
+          console.error("Error resetting system in Firestore:", err);
+        } finally {
+          setIsSyncing(false);
+        }
+      }
+    });
   };
 
   // Helper Labels & Styles
@@ -612,72 +762,19 @@ export default function Home() {
     );
   };
 
-  // Helper for relative updated time label
-  const formatRelativeTime = (isoString: string) => {
-    if (!isoString) return "recente";
-    try {
-      const date = new Date(isoString);
-      const now = new Date();
-      const diffMs = now.getTime() - date.getTime();
-      const diffSecs = Math.max(0, Math.floor(diffMs / 1000));
-      const diffMins = Math.floor(diffSecs / 60);
-      const diffHours = Math.floor(diffMins / 60);
-      const diffDays = Math.floor(diffHours / 24);
+  // Filter & Search computation
+  const filteredProjects = projects.filter((p) => {
+    const matchesSearch = 
+      p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()));
+    
+    const matchesStatus = statusFilter === "all" ? true : p.status === statusFilter;
+    const matchesSource = sourceFilter === "all" ? true : p.source === sourceFilter;
+    const matchesTag = selectedTag ? p.tags.includes(selectedTag) : true;
 
-      if (diffSecs < 15) return "agora mesmo";
-      if (diffSecs < 60) return `há ${diffSecs}s`;
-      if (diffMins < 60) return `há ${diffMins} min`;
-      if (diffHours < 24) return `há ${diffHours}h`;
-      if (diffDays === 1) return "ontem";
-      if (diffDays < 7) return `há ${diffDays} dias`;
-      
-      return date.toLocaleDateString("pt-BR", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric"
-      });
-    } catch {
-      return "recente";
-    }
-  };
-
-  // Filter & Search computation sorted by updatedAt descending
-  const filteredProjects = projects
-    .filter((p) => {
-      const matchesSearch = 
-        p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()));
-      
-      const matchesStatus = statusFilter === "all" ? true : p.status === statusFilter;
-      const matchesSource = sourceFilter === "all" ? true : p.source === sourceFilter;
-      const matchesTag = selectedTag ? p.tags.includes(selectedTag) : true;
-
-      return matchesSearch && matchesStatus && matchesSource && matchesTag;
-    })
-    .sort((a, b) => {
-      const getTimeSafe = (dateStr: string | undefined | null) => {
-        if (!dateStr) return 0;
-        try {
-          const t = new Date(dateStr).getTime();
-          return isNaN(t) ? 0 : t;
-        } catch {
-          return 0;
-        }
-      };
-      
-      const dateA = getTimeSafe(a.updatedAt || a.createdAt);
-      const dateB = getTimeSafe(b.updatedAt || b.createdAt);
-      
-      if (dateB !== dateA) {
-        return dateB - dateA;
-      }
-      
-      // Fallback a data de criacao
-      const createA = getTimeSafe(a.createdAt);
-      const createB = getTimeSafe(b.createdAt);
-      return createB - createA;
-    });
+    return matchesSearch && matchesStatus && matchesSource && matchesTag;
+  });
 
   // Calculate generic statistics
   const totalProjectsCount = projects.length;
@@ -746,6 +843,18 @@ export default function Home() {
               Project Hub
               <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 font-normal text-slate-500 font-mono">
                 Minimalist
+              </span>
+              <span className={`inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full ${
+                isLoadingDb 
+                  ? "bg-amber-50 text-amber-600 border border-amber-100" 
+                  : isSyncing 
+                  ? "bg-blue-50 text-blue-600 border border-blue-100" 
+                  : "bg-emerald-50 text-emerald-600 border border-emerald-100"
+              }`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${
+                  isLoadingDb ? "bg-amber-400 animate-pulse" : isSyncing ? "bg-blue-400 animate-pulse" : "bg-emerald-400"
+                }`} />
+                {isLoadingDb ? "Nuvem: Conectando..." : isSyncing ? "Sincronizando..." : "Nuvem Ativa"}
               </span>
             </h1>
             <p className="text-xs text-slate-400 font-mono">
@@ -1131,10 +1240,6 @@ export default function Home() {
                                 <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
                               </a>
                             )}
-                            {(p.links.github || p.links.deploy || p.links.workspace) && <span className="text-slate-200 text-xs">|</span>}
-                            <span className="text-[10px] font-mono text-slate-400" title={`Atualizado em: ${new Date(p.updatedAt).toLocaleString()}`}>
-                              {formatRelativeTime(p.updatedAt)}
-                            </span>
                           </div>
 
                           <div className="flex items-center gap-2">
@@ -1195,7 +1300,6 @@ export default function Home() {
                           ) : (
                             colProjects.map((p) => (
                               <motion.div
-                                layout
                                 layoutId={p.id}
                                 key={p.id}
                                 className="bg-white border border-slate-200/60 rounded-lg p-4 shadow-2xs hover:shadow-xs transition-shadow relative group"
@@ -1203,41 +1307,34 @@ export default function Home() {
                                 <div className="flex items-center justify-between mb-2">
                                   {getSourceBadge(p.source)}
                                   
-                                  <div className="flex items-center gap-1.5">
-                                    {/* Relative time indicator, hidden when hover triggers Quick Movers */}
-                                    <span className="text-[10px] font-mono text-slate-400 group-hover:hidden" title={`Atualizado em: ${new Date(p.updatedAt).toLocaleString()}`}>
-                                      {formatRelativeTime(p.updatedAt)}
-                                    </span>
-
-                                    {/* Quick Arrow Movers to easily shift status */}
-                                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                      {colStatus !== "planning" && (
-                                        <button
-                                          onClick={() => {
-                                            const prevs: Project["status"][] = ["planning", "in_progress", "completed"];
-                                            const currIdx = prevs.indexOf(colStatus);
-                                            handleMoveStatus(p.id, prevs[currIdx - 1]);
-                                          }}
-                                          title="Mover para esquerda"
-                                          className="p-1 bg-slate-50 hover:bg-slate-100 rounded text-slate-500 hover:text-slate-900 border border-slate-200"
-                                        >
-                                          <ChevronRight className="w-3 h-3 rotate-180" />
-                                        </button>
-                                      )}
-                                      {colStatus !== "completed" && (
-                                        <button
-                                          onClick={() => {
-                                            const nexts: Project["status"][] = ["planning", "in_progress", "completed"];
-                                            const currIdx = nexts.indexOf(colStatus);
-                                            handleMoveStatus(p.id, nexts[currIdx + 1]);
-                                          }}
-                                          title="Mover para direita"
-                                          className="p-1 bg-slate-50 hover:bg-slate-100 rounded text-slate-500 hover:text-slate-900 border border-slate-200"
-                                        >
-                                          <ChevronRight className="w-3 h-3" />
-                                        </button>
-                                      )}
-                                    </div>
+                                  {/* Quick Arrow Movers to easily shift status */}
+                                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    {colStatus !== "planning" && (
+                                      <button
+                                        onClick={() => {
+                                          const prevs: Project["status"][] = ["planning", "in_progress", "completed"];
+                                          const currIdx = prevs.indexOf(colStatus);
+                                          handleMoveStatus(p.id, prevs[currIdx - 1]);
+                                        }}
+                                        title="Mover para esquerda"
+                                        className="p-1 bg-slate-50 hover:bg-slate-100 rounded text-slate-500 hover:text-slate-900 border border-slate-200"
+                                      >
+                                        <ChevronRight className="w-3 h-3 rotate-180" />
+                                      </button>
+                                    )}
+                                    {colStatus !== "completed" && (
+                                      <button
+                                        onClick={() => {
+                                          const nexts: Project["status"][] = ["planning", "in_progress", "completed"];
+                                          const currIdx = nexts.indexOf(colStatus);
+                                          handleMoveStatus(p.id, nexts[currIdx + 1]);
+                                        }}
+                                        title="Mover para direita"
+                                        className="p-1 bg-slate-50 hover:bg-slate-100 rounded text-slate-500 hover:text-slate-900 border border-slate-200"
+                                      >
+                                        <ChevronRight className="w-3 h-3" />
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
 
@@ -1325,9 +1422,6 @@ export default function Home() {
                                   {p.title}
                                 </span>
                               </button>
-                              <span className="text-[10px] font-mono text-slate-400 block mt-0.5" title={`Atualizado em: ${new Date(p.updatedAt).toLocaleString()}`}>
-                                Alterado {formatRelativeTime(p.updatedAt)}
-                              </span>
                             </div>
 
                             {/* Status */}
@@ -2370,6 +2464,73 @@ export default function Home() {
                     className="px-4 py-2 bg-slate-900 hover:bg-slate-800 active:scale-95 text-white rounded-lg text-xs font-bold shadow-sm transition-all uppercase tracking-wider"
                   >
                     Salvar Alterações
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: CONFIRMAÇÃO CUSTOMIZADA */}
+      <AnimatePresence>
+        {confirmDialog.isOpen && (
+          <div className="fixed inset-0 z-[100] overflow-y-auto" id="custom-confirm-modal">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+              className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm"
+            />
+
+            {/* Modal Container */}
+            <div className="flex min-h-screen items-center justify-center p-4">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 15 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 15 }}
+                transition={{ duration: 0.2, ease: "easeOut" }}
+                className="relative w-full max-w-md overflow-hidden rounded-2xl bg-white border border-slate-100 p-6 shadow-2xl space-y-4 z-10"
+              >
+                {/* Header / Title */}
+                <div className="flex items-start gap-3 text-left">
+                  <div className={`w-10 h-10 rounded-full shrink-0 flex items-center justify-center ${
+                    confirmDialog.isDanger ? "bg-red-50 text-red-600" : "bg-blue-50 text-blue-600"
+                  }`}>
+                    {confirmDialog.isDanger ? <AlertTriangle className="w-5 h-5" /> : <HelpCircle className="w-5 h-5" />}
+                  </div>
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-bold text-slate-900 font-sans">
+                      {confirmDialog.title}
+                    </h3>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      {confirmDialog.description}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100/50">
+                  <button
+                    onClick={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+                    className="px-3.5 py-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-lg transition-colors font-sans"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={async () => {
+                      setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+                      await confirmDialog.onConfirm();
+                    }}
+                    className={`px-3.5 py-1.5 text-xs font-semibold rounded-lg text-white shadow-sm transition-all font-sans ${
+                      confirmDialog.isDanger 
+                        ? "bg-red-600 hover:bg-red-700 active:bg-red-800" 
+                        : "bg-blue-600 hover:bg-blue-700 active:bg-blue-800"
+                    }`}
+                  >
+                    {confirmDialog.actionLabel}
                   </button>
                 </div>
               </motion.div>
