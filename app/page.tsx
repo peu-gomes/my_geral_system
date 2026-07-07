@@ -37,7 +37,10 @@ import {
   Sun,
   Moon,
   AlertTriangle,
-  HelpCircle
+  HelpCircle,
+  Lock,
+  Eye,
+  EyeOff
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { INITIAL_PROJECTS, Project, Task } from "@/lib/initial-projects";
@@ -104,9 +107,24 @@ export default function Home() {
   const [tempAiPersona, setTempAiPersona] = useState("mentor");
   const [tempDefaultViewMode, setTempDefaultViewMode] = useState<"bento" | "kanban" | "list">("bento");
   const [tempTheme, setTempTheme] = useState<"light" | "dark">("light");
+  const [showSettingsPassword, setShowSettingsPassword] = useState(false);
 
   // New task input (within details drawer)
   const [newTaskTitle, setNewTaskTitle] = useState("");
+
+  // Security / Password Authentication States
+  const [accessPassword, setAccessPassword] = useState<string | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState<boolean>(true);
+  const [loginPasswordInput, setLoginPasswordInput] = useState("");
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [loginError, setLoginError] = useState("");
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  // States for Settings modal password input
+  const [isPasswordProtected, setIsPasswordProtected] = useState<boolean>(false);
+  const [tempPassword, setTempPassword] = useState<string>("");
 
   // Firestore specific states
   const [isLoadingDb, setIsLoadingDb] = useState(true);
@@ -133,9 +151,11 @@ export default function Home() {
   useEffect(() => {
     async function initData() {
       setIsLoadingDb(true);
+      setIsCheckingAuth(true);
       try {
         // 1. Fetch settings from Firestore
         const dbSettings = await getDbSettings();
+        let loadedPassword: string | null = null;
         if (dbSettings) {
           if (dbSettings.userName) setUserName(dbSettings.userName);
           if (dbSettings.aiPersona) setAiPersona(dbSettings.aiPersona);
@@ -144,12 +164,20 @@ export default function Home() {
             setViewMode(dbSettings.defaultViewMode);
           }
           if (dbSettings.theme) setTheme(dbSettings.theme);
+          if (dbSettings.accessPassword) {
+            loadedPassword = dbSettings.accessPassword;
+            setAccessPassword(dbSettings.accessPassword);
+            setIsPasswordProtected(true);
+            setTempPassword(dbSettings.accessPassword);
+          }
         } else {
           // Fallback to local storage if no settings in DB
           const savedName = localStorage.getItem("project_hub_username");
           const savedPersona = localStorage.getItem("project_hub_ai_persona");
           const savedView = localStorage.getItem("project_hub_default_view");
           const savedTheme = localStorage.getItem("project_hub_theme");
+          const savedPassword = localStorage.getItem("project_hub_password");
+
           if (savedName) setUserName(savedName);
           if (savedPersona) setAiPersona(savedPersona);
           if (savedView) {
@@ -157,6 +185,26 @@ export default function Home() {
             setViewMode(savedView as any);
           }
           if (savedTheme) setTheme(savedTheme as any);
+          if (savedPassword) {
+            loadedPassword = savedPassword;
+            setAccessPassword(savedPassword);
+            setIsPasswordProtected(true);
+            setTempPassword(savedPassword);
+          }
+        }
+
+        // Check authentication status
+        const isSessionAuth = typeof window !== "undefined" && (
+          sessionStorage.getItem("project_hub_auth") === "true" ||
+          localStorage.getItem("project_hub_auth") === "true"
+        );
+
+        if (!loadedPassword) {
+          setIsAuthenticated(true);
+        } else if (isSessionAuth) {
+          setIsAuthenticated(true);
+        } else {
+          setIsAuthenticated(false);
         }
 
         // 2. Fetch projects from Firestore
@@ -206,6 +254,7 @@ export default function Home() {
         if (savedTheme) setTheme(savedTheme as any);
       } finally {
         setIsLoadingDb(false);
+        setIsCheckingAuth(false);
       }
     }
 
@@ -657,6 +706,21 @@ export default function Home() {
     setDefaultViewMode(view);
     setViewMode(view);
     setTheme(themeValue);
+
+    // Save Password settings
+    const finalPassword = isPasswordProtected && tempPassword.trim() !== "" ? tempPassword.trim() : null;
+    setAccessPassword(finalPassword);
+    if (finalPassword) {
+      localStorage.setItem("project_hub_password", finalPassword);
+      // Since they just created/updated their own password in their session, they are authenticated
+      setIsAuthenticated(true);
+      sessionStorage.setItem("project_hub_auth", "true");
+    } else {
+      localStorage.removeItem("project_hub_password");
+      localStorage.removeItem("project_hub_auth");
+      sessionStorage.removeItem("project_hub_auth");
+    }
+
     localStorage.setItem("project_hub_username", cleanName);
     localStorage.setItem("project_hub_ai_persona", persona);
     localStorage.setItem("project_hub_default_view", view);
@@ -670,13 +734,38 @@ export default function Home() {
         userName: cleanName,
         aiPersona: persona,
         defaultViewMode: view,
-        theme: themeValue
+        theme: themeValue,
+        accessPassword: finalPassword
       });
     } catch (err) {
       console.error("Error saving settings to Firestore:", err);
     } finally {
       setIsSyncing(false);
     }
+  };
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError("");
+    setIsLoggingIn(true);
+    
+    setTimeout(() => {
+      if (loginPasswordInput.trim() === accessPassword) {
+        setIsAuthenticated(true);
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem("project_hub_auth", "true");
+          if (rememberMe) {
+            localStorage.setItem("project_hub_auth", "true");
+          }
+        }
+        showToast(`Bem-vindo de volta!`, "success");
+        setLoginPasswordInput("");
+        setLoginError("");
+      } else {
+        setLoginError("Senha incorreta. Por favor, tente novamente.");
+      }
+      setIsLoggingIn(false);
+    }, 600);
   };
 
   const handleResetSystem = () => {
@@ -692,6 +781,9 @@ export default function Home() {
         localStorage.removeItem("project_hub_ai_persona");
         localStorage.removeItem("project_hub_default_view");
         localStorage.removeItem("project_hub_theme");
+        localStorage.removeItem("project_hub_password");
+        localStorage.removeItem("project_hub_auth");
+        sessionStorage.removeItem("project_hub_auth");
         
         setProjects(INITIAL_PROJECTS);
         setUserName("Desenvolvedor");
@@ -699,6 +791,10 @@ export default function Home() {
         setViewMode("bento");
         setDefaultViewMode("bento");
         setTheme("light");
+        setAccessPassword(null);
+        setIsPasswordProtected(false);
+        setTempPassword("");
+        setIsAuthenticated(true);
         showToast("Sistema redefinido com sucesso!", "info");
         setIsSettingsModalOpen(false);
 
@@ -715,7 +811,8 @@ export default function Home() {
             userName: "Desenvolvedor",
             aiPersona: "mentor",
             defaultViewMode: "bento",
-            theme: "light"
+            theme: "light",
+            accessPassword: null
           });
         } catch (err) {
           console.error("Error resetting system in Firestore:", err);
@@ -762,19 +859,51 @@ export default function Home() {
     );
   };
 
-  // Filter & Search computation
-  const filteredProjects = projects.filter((p) => {
-    const matchesSearch = 
-      p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()));
-    
-    const matchesStatus = statusFilter === "all" ? true : p.status === statusFilter;
-    const matchesSource = sourceFilter === "all" ? true : p.source === sourceFilter;
-    const matchesTag = selectedTag ? p.tags.includes(selectedTag) : true;
+  const formatLastUpdated = (dateString?: string) => {
+    if (!dateString) return "";
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return "";
+      
+      const today = new Date();
+      const isToday = date.getDate() === today.getDate() &&
+                      date.getMonth() === today.getMonth() &&
+                      date.getFullYear() === today.getFullYear();
+      
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      
+      if (isToday) {
+        return `Ativo hoje às ${hours}:${minutes}`;
+      } else {
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        return `Ativo em ${day}/${month} às ${hours}:${minutes}`;
+      }
+    } catch (e) {
+      return "";
+    }
+  };
 
-    return matchesSearch && matchesStatus && matchesSource && matchesTag;
-  });
+  // Filter & Search computation with updatedAt descending sorting
+  const filteredProjects = projects
+    .filter((p) => {
+      const matchesSearch = 
+        p.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        p.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()));
+      
+      const matchesStatus = statusFilter === "all" ? true : p.status === statusFilter;
+      const matchesSource = sourceFilter === "all" ? true : p.source === sourceFilter;
+      const matchesTag = selectedTag ? p.tags.includes(selectedTag) : true;
+
+      return matchesSearch && matchesStatus && matchesSource && matchesTag;
+    })
+    .sort((a, b) => {
+      const dateA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+      const dateB = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+      return dateB - dateA;
+    });
 
   // Calculate generic statistics
   const totalProjectsCount = projects.length;
@@ -795,6 +924,139 @@ export default function Home() {
     const comp = p.tasks.filter((t) => t.completed).length;
     return Math.round((comp / p.tasks.length) * 100);
   };
+
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 font-sans">
+        <div className="text-center space-y-4">
+          <div className="w-12 h-12 rounded-xl bg-slate-900 flex items-center justify-center text-white mx-auto shadow-md animate-bounce">
+            <Layers className="w-6 h-6" />
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-sm font-bold text-slate-800">Conectando ao Project Hub...</h2>
+            <p className="text-[10px] text-slate-400 font-mono animate-pulse">Autenticando sessão segura...</p>
+          </div>
+          <Loader2 className="w-4 h-4 text-slate-400 animate-spin mx-auto" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4 font-sans relative overflow-hidden">
+        {/* Subtle background decorative shapes */}
+        <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] rounded-full bg-slate-900/5 blur-3xl -z-10" />
+        <div className="absolute bottom-[-20%] right-[-10%] w-[500px] h-[500px] rounded-full bg-slate-200/40 blur-3xl -z-10" />
+
+        <div className="w-full max-w-md bg-white border border-slate-200/50 rounded-2xl p-8 shadow-2xl space-y-6 text-center">
+          {/* Logo */}
+          <div className="space-y-2">
+            <div className="w-12 h-12 rounded-xl bg-slate-900 flex items-center justify-center text-white mx-auto shadow-lg relative">
+              <Layers className="w-6 h-6 animate-pulse" />
+              <div className="absolute -top-1.5 -right-1.5 bg-red-500 text-[9px] font-mono font-bold text-white px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm">
+                <Lock className="w-2.5 h-2.5" />
+                <span>Lock</span>
+              </div>
+            </div>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight font-sans">
+              Project Hub
+            </h1>
+            <p className="text-xs text-slate-400 font-mono">
+              Painel de Projetos Minimalista & Integrado
+            </p>
+          </div>
+
+          <div className="bg-slate-50 border border-slate-100 rounded-xl p-4 text-left text-pretty">
+            <h3 className="text-xs font-bold text-slate-700 flex items-center gap-1.5 font-sans mb-1 uppercase tracking-wide">
+              <Lock className="w-3.5 h-3.5 text-slate-500" />
+              Espaço Privado e Protegido
+            </h3>
+            <p className="text-[10px] text-slate-400 leading-relaxed font-mono">
+              Este dashboard contém informações, planos e metas de desenvolvimento confidenciais do proprietário. Insira a senha de acesso para continuar.
+            </p>
+          </div>
+
+          {/* Form */}
+          <form onSubmit={handleLogin} className="space-y-4 text-left">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block">
+                Senha de Acesso
+              </label>
+              <div className="relative">
+                <input
+                  type={showLoginPassword ? "text" : "password"}
+                  value={loginPasswordInput}
+                  onChange={(e) => {
+                    setLoginPasswordInput(e.target.value);
+                    if (loginError) setLoginError("");
+                  }}
+                  placeholder="Insira a senha secreta"
+                  required
+                  autoFocus
+                  className="w-full bg-slate-50 border border-slate-200/60 rounded-xl pl-3.5 pr-12 py-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-500 shadow-sm transition-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowLoginPassword(!showLoginPassword)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 flex items-center justify-center transition-colors"
+                >
+                  {showLoginPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {loginError && (
+              <div className="bg-red-50 text-red-700 text-xs px-3.5 py-2.5 rounded-lg border border-red-100 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-500 shrink-0" />
+                <span className="font-medium leading-tight">{loginError}</span>
+              </div>
+            )}
+
+            {/* Remember me toggle */}
+            <div className="flex items-center justify-between">
+              <label className="flex items-center gap-2 cursor-pointer group">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 h-3.5 w-3.5 cursor-pointer accent-slate-900"
+                />
+                <span className="text-[10px] font-mono font-bold text-slate-400 group-hover:text-slate-600 transition-colors uppercase tracking-wider select-none">
+                  Lembrar neste dispositivo
+                </span>
+              </label>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoggingIn || !loginPasswordInput.trim()}
+              className="w-full bg-slate-900 hover:bg-slate-800 active:scale-[0.98] disabled:opacity-55 text-white py-3 rounded-xl text-xs font-bold shadow-md transition-all uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer"
+            >
+              {isLoggingIn ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  <span>Autenticando...</span>
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span>Entrar no Painel</span>
+                </>
+              )}
+            </button>
+          </form>
+
+          {/* Help footer */}
+          <div className="pt-4 border-t border-slate-100 text-center">
+            <p className="text-[9px] text-slate-400 leading-normal">
+              Está com dificuldades? Se você é o dono deste aplicativo e esqueceu a senha, remova o campo <code className="bg-slate-50 px-1 py-0.5 rounded text-[8px] font-mono text-slate-500">accessPassword</code> do documento <code className="bg-slate-50 px-1 py-0.5 rounded text-[8px] font-mono text-slate-500">settings/user_config</code> na sua console Firebase.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col font-sans relative">
@@ -908,6 +1170,8 @@ export default function Home() {
               setTempAiPersona(aiPersona);
               setTempDefaultViewMode(defaultViewMode);
               setTempTheme(theme);
+              setIsPasswordProtected(!!accessPassword);
+              setTempPassword(accessPassword || "");
               setIsSettingsModalOpen(true);
             }}
             title="Configurações do Sistema"
@@ -916,6 +1180,22 @@ export default function Home() {
             <Settings className="w-4 h-4" />
             <span className="hidden sm:inline">Configurar</span>
           </button>
+
+          {accessPassword && (
+            <button
+              onClick={() => {
+                setIsAuthenticated(false);
+                sessionStorage.removeItem("project_hub_auth");
+                localStorage.removeItem("project_hub_auth");
+                showToast("Sessão bloqueada com segurança!", "info");
+              }}
+              title="Bloquear Acesso"
+              className="p-2 hover:bg-slate-100 hover:bg-red-50/50 rounded-lg text-slate-500 hover:text-red-600 transition-all border border-slate-200/60 flex items-center gap-1.5 text-xs font-medium shadow-sm"
+            >
+              <Lock className="w-4 h-4 text-slate-400 hover:text-red-500" />
+              <span className="hidden sm:inline">Bloquear</span>
+            </button>
+          )}
 
           <button
             onClick={() => setIsNewProjectModalOpen(true)}
@@ -1159,6 +1439,12 @@ export default function Home() {
                               </span>
                             </div>
 
+                            {p.updatedAt && (
+                              <div className="text-[10px] text-slate-400 font-mono mb-2">
+                                {formatLastUpdated(p.updatedAt)}
+                              </div>
+                            )}
+
                             <button
                               onClick={() => {
                                 setSelectedProjectId(p.id);
@@ -1355,6 +1641,12 @@ export default function Home() {
                                   {p.description}
                                 </p>
 
+                                {p.updatedAt && (
+                                  <div className="text-[9px] text-slate-400 font-mono mt-1.5">
+                                    {formatLastUpdated(p.updatedAt)}
+                                  </div>
+                                )}
+
                                 {/* Mini tasks summary */}
                                 {p.tasks.length > 0 && (
                                   <div className="mt-3 flex items-center justify-between">
@@ -1422,6 +1714,11 @@ export default function Home() {
                                   {p.title}
                                 </span>
                               </button>
+                              {p.updatedAt && (
+                                <span className="text-[10px] text-slate-400 font-mono mt-0.5 block">
+                                  {formatLastUpdated(p.updatedAt)}
+                                </span>
+                              )}
                             </div>
 
                             {/* Status */}
@@ -2426,6 +2723,59 @@ export default function Home() {
                     <p className="text-[10px] text-slate-400 leading-normal">
                       Escolha entre o visual claro (padrão elegante) ou o modo escuro imersivo para o Project Hub.
                     </p>
+                  </div>
+
+                  {/* Segurança e Controle de Acesso */}
+                  <div className="space-y-3 pt-4 border-t border-slate-100">
+                    <label className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block">
+                      Segurança e Controle de Acesso
+                    </label>
+                    <div className="bg-slate-50 border border-slate-200/60 rounded-xl p-3.5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <span className="text-[11px] font-bold text-slate-800 block">Proteger com Senha</span>
+                          <span className="text-[9px] text-slate-400 leading-normal block">Exige senha de acesso ao entrar no Project Hub.</span>
+                        </div>
+                        <label className="relative inline-flex items-center cursor-pointer">
+                          <input 
+                            type="checkbox" 
+                            checked={isPasswordProtected}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setIsPasswordProtected(checked);
+                              if (!checked) setTempPassword("");
+                            }}
+                            className="sr-only peer"
+                          />
+                          <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-slate-900"></div>
+                        </label>
+                      </div>
+
+                      {isPasswordProtected && (
+                        <div className="space-y-1.5 pt-2 border-t border-slate-100/50">
+                          <label className="text-[10px] font-mono text-slate-400 block">Definir Senha de Acesso</label>
+                          <div className="relative">
+                            <input
+                              type={showSettingsPassword ? "text" : "password"}
+                              value={tempPassword}
+                              onChange={(e) => setTempPassword(e.target.value)}
+                              placeholder="Digite uma senha segura"
+                              className="w-full bg-white border border-slate-200 rounded-lg pl-3 pr-10 py-1.5 text-xs text-slate-800 focus:outline-none focus:border-slate-400 transition-colors"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowSettingsPassword(!showSettingsPassword)}
+                              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 flex items-center justify-center"
+                            >
+                              {showSettingsPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                          <p className="text-[9px] text-amber-600 leading-normal">
+                            Importante: Guarde essa senha com cuidado. Se esquecer, precisará alterá-la diretamente no console do Firestore.
+                          </p>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
                   {/* Seção de perigo/backup adicional */}
