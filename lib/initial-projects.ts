@@ -10,6 +10,7 @@ export interface Project {
   description: string;
   status: "planning" | "in_progress" | "completed" | "archived";
   source: "ai_studio" | "external";
+  priority?: "low" | "medium" | "high";
   tags: string[];
   tasks: Task[];
   links: {
@@ -39,6 +40,7 @@ export const INITIAL_PROJECTS: Project[] = [
     description: "Plataforma minimalista e inteligente para a organização centralizada de projetos pessoais, acadêmicos e do AI Studio, com mentoria de tarefas por inteligência artificial.",
     status: "completed",
     source: "ai_studio",
+    priority: "high",
     tags: ["Next.js", "Tailwind CSS", "Gemini API", "TypeScript"],
     tasks: [
       { id: "ph-1", title: "Definir paleta de cores minimalista (Off-white & Charcoal)", completed: true },
@@ -62,6 +64,7 @@ export const INITIAL_PROJECTS: Project[] = [
     description: "Uma loja online com catálogo dinâmico de plantas, dicas de cultivo personalizadas, carrinho persistente e checkout integrado de maneira minimalista.",
     status: "in_progress",
     source: "external",
+    priority: "medium",
     tags: ["React", "Node.js", "PostgreSQL"],
     tasks: [
       { id: "em-1", title: "Modelar banco de dados de produtos e usuários", completed: true },
@@ -82,6 +85,7 @@ export const INITIAL_PROJECTS: Project[] = [
     description: "Um assistente inteligente que recebe um tema livre ou arquivo de texto e gera uma estrutura completa de tópicos e design para apresentações profissionais instantâneas.",
     status: "planning",
     source: "external",
+    priority: "low",
     tags: ["Python", "Gemini API", "FastAPI"],
     tasks: [
       { id: "as-1", title: "Definir engenharia de prompt para gerar tópicos coerentes", completed: false },

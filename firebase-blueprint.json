@@ -18,6 +18,11 @@
           "enum": ["ai_studio", "external"],
           "description": "Where the project was initiated."
         },
+        "priority": {
+          "type": "string",
+          "enum": ["low", "medium", "high"],
+          "description": "The priority level of the project."
+        },
         "tags": {
           "type": "array",
           "items": { "type": "string" },

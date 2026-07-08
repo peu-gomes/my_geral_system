@@ -40,7 +40,10 @@ import {
   HelpCircle,
   Lock,
   Eye,
-  EyeOff
+  EyeOff,
+  AlertCircle,
+  ArrowUp,
+  ArrowDown
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { INITIAL_PROJECTS, Project, Task } from "@/lib/initial-projects";
@@ -67,6 +70,7 @@ export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [sourceFilter, setSourceFilter] = useState<string>("all");
+  const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"bento" | "kanban" | "list">("bento");
   
@@ -80,6 +84,7 @@ export default function Home() {
   const [newDescription, setNewDescription] = useState("");
   const [newSource, setNewSource] = useState<"ai_studio" | "external">("external");
   const [newStatus, setNewStatus] = useState<"planning" | "in_progress" | "completed">("planning");
+  const [newPriority, setNewPriority] = useState<"low" | "medium" | "high">("medium");
   const [newTagsString, setNewTagsString] = useState("");
   const [newGithub, setNewGithub] = useState("");
   const [newDeploy, setNewDeploy] = useState("");
@@ -316,6 +321,7 @@ export default function Home() {
       description: newDescription.trim(),
       status: newStatus,
       source: newSource,
+      priority: newPriority,
       tags: tagsArray,
       tasks: [],
       links: {
@@ -345,6 +351,7 @@ export default function Home() {
     setNewDescription("");
     setNewSource("external");
     setNewStatus("planning");
+    setNewPriority("medium");
     setNewTagsString("");
     setNewGithub("");
     setNewDeploy("");
@@ -660,6 +667,34 @@ export default function Home() {
     showToast(`Status atualizado para: ${getStatusLabel(newStatus)}`, "info");
   };
 
+  // Drag and drop states & handlers for Kanban view
+  const [isDraggingOverCol, setIsDraggingOverCol] = useState<Record<string, boolean>>({});
+
+  const handleDragStart = (e: React.DragEvent, projectId: string) => {
+    e.dataTransfer.setData("text/plain", projectId);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: React.DragEvent, colStatus: Project["status"]) => {
+    e.preventDefault(); // allow drop
+    if (!isDraggingOverCol[colStatus]) {
+      setIsDraggingOverCol((prev) => ({ ...prev, [colStatus]: true }));
+    }
+  };
+
+  const handleDragLeave = (colStatus: Project["status"]) => {
+    setIsDraggingOverCol((prev) => ({ ...prev, [colStatus]: false }));
+  };
+
+  const handleDrop = (e: React.DragEvent, colStatus: Project["status"]) => {
+    e.preventDefault();
+    setIsDraggingOverCol((prev) => ({ ...prev, [colStatus]: false }));
+    const projectId = e.dataTransfer.getData("text/plain");
+    if (projectId) {
+      handleMoveStatus(projectId, colStatus);
+    }
+  };
+
   // Import / Export JSON Backup
   const handleExportBackup = () => {
     const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(projects, null, 2));
@@ -859,6 +894,32 @@ export default function Home() {
     );
   };
 
+  const getPriorityBadge = (priority?: "low" | "medium" | "high") => {
+    const p = priority || "medium";
+    if (p === "high") {
+      return (
+        <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full bg-rose-50 text-rose-700 border border-rose-200/60 shadow-2xs">
+          <AlertCircle className="w-2.5 h-2.5 text-rose-500" />
+          Alta
+        </span>
+      );
+    }
+    if (p === "medium") {
+      return (
+        <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200/60 shadow-2xs">
+          <ArrowUp className="w-2.5 h-2.5 text-amber-500" />
+          Média
+        </span>
+      );
+    }
+    return (
+      <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-50 text-slate-600 border border-slate-200/60 shadow-2xs">
+        <ArrowDown className="w-2.5 h-2.5 text-slate-400" />
+        Baixa
+      </span>
+    );
+  };
+
   const formatLastUpdated = (dateString?: string) => {
     if (!dateString) return "";
     try {
@@ -895,9 +956,10 @@ export default function Home() {
       
       const matchesStatus = statusFilter === "all" ? true : p.status === statusFilter;
       const matchesSource = sourceFilter === "all" ? true : p.source === sourceFilter;
+      const matchesPriority = priorityFilter === "all" ? true : (p.priority || "medium") === priorityFilter;
       const matchesTag = selectedTag ? p.tags.includes(selectedTag) : true;
 
-      return matchesSearch && matchesStatus && matchesSource && matchesTag;
+      return matchesSearch && matchesStatus && matchesSource && matchesPriority && matchesTag;
     })
     .sort((a, b) => {
       const dateA = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
@@ -1210,6 +1272,43 @@ export default function Home() {
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-6 flex flex-col gap-6">
         
+        {/* Banner de aviso sobre segurança */}
+        {!accessPassword && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-amber-50/70 border border-amber-200/60 text-amber-800 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xs"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center text-amber-700 shrink-0">
+                <Lock className="w-4 h-4 animate-pulse" />
+              </div>
+              <div className="space-y-0.5 text-left">
+                <h4 className="text-xs font-bold font-sans flex items-center gap-1.5">
+                  Proteja seus Dados e Projetos!
+                </h4>
+                <p className="text-[10px] text-amber-600/90 font-mono leading-relaxed">
+                  A tela de login está desativada porque nenhuma senha de acesso foi definida. Defina uma senha rápida nas Configurações para ocultar seus dados de visitantes e curiosos.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setTempUserName(userName);
+                setTempAiPersona(aiPersona);
+                setTempDefaultViewMode(defaultViewMode);
+                setTempTheme(theme);
+                setIsPasswordProtected(false);
+                setTempPassword("");
+                setIsSettingsModalOpen(true);
+              }}
+              className="bg-amber-800 hover:bg-amber-900 active:scale-95 text-white text-[10px] font-bold px-3.5 py-1.5 rounded-lg font-mono uppercase tracking-wider transition-all self-stretch sm:self-auto text-center cursor-pointer"
+            >
+              Ativar Login / Senha
+            </button>
+          </motion.div>
+        )}
+        
         {/* Statistics & Overview Dashboard Widget */}
         <section className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div className="bg-white border border-slate-100/80 rounded-xl p-4 shadow-sm flex flex-col justify-between">
@@ -1318,6 +1417,18 @@ export default function Home() {
                 <option value="in_progress">Em Desenvolvimento</option>
                 <option value="completed">Concluídos</option>
                 <option value="archived">Arquivados</option>
+              </select>
+
+              {/* Priority filter */}
+              <select
+                value={priorityFilter}
+                onChange={(e) => setPriorityFilter(e.target.value)}
+                className="bg-slate-50 border border-slate-200 text-slate-700 py-1.5 px-2.5 rounded-lg text-xs focus:outline-none focus:border-slate-400"
+              >
+                <option value="all">Todas Prioridades</option>
+                <option value="high">Alta Prioridade</option>
+                <option value="medium">Média Prioridade</option>
+                <option value="low">Baixa Prioridade</option>
               </select>
 
               <div className="h-4 w-px bg-slate-200 mx-1 hidden sm:block" />
@@ -1433,7 +1544,10 @@ export default function Home() {
                         <div className="p-5 flex-1 flex flex-col justify-between">
                           <div>
                             <div className="flex items-center justify-between gap-2 mb-2.5">
-                              {getSourceBadge(p.source)}
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {getSourceBadge(p.source)}
+                                {getPriorityBadge(p.priority)}
+                              </div>
                               <span className={`text-[10px] font-mono px-2 py-0.5 rounded-md border ${getStatusColor(p.status)}`}>
                                 {getStatusLabel(p.status)}
                               </span>
@@ -1561,9 +1675,20 @@ export default function Home() {
                   {/* Status Column generator */}
                   {(["planning", "in_progress", "completed"] as Project["status"][]).map((colStatus) => {
                     const colProjects = filteredProjects.filter((p) => p.status === colStatus);
+                    const isOver = isDraggingOverCol[colStatus];
                     
                     return (
-                      <div key={colStatus} className="bg-slate-50 border border-slate-200/50 rounded-xl p-4 flex flex-col gap-4 min-h-[500px]">
+                      <div 
+                        key={colStatus} 
+                        onDragOver={(e) => handleDragOver(e, colStatus)}
+                        onDragLeave={() => handleDragLeave(colStatus)}
+                        onDrop={(e) => handleDrop(e, colStatus)}
+                        className={`border rounded-xl p-4 flex flex-col gap-4 min-h-[500px] transition-all duration-200 ${
+                          isOver 
+                            ? "bg-slate-100/80 border-slate-400/80 shadow-xs scale-[1.01]" 
+                            : "bg-slate-50 border-slate-200/50"
+                        }`}
+                      >
                         
                         {/* Column Header */}
                         <div className="flex items-center justify-between border-b border-slate-200/60 pb-2">
@@ -1585,13 +1710,31 @@ export default function Home() {
                             </div>
                           ) : (
                             colProjects.map((p) => (
-                              <motion.div
-                                layoutId={p.id}
+                              <div
                                 key={p.id}
-                                className="bg-white border border-slate-200/60 rounded-lg p-4 shadow-2xs hover:shadow-xs transition-shadow relative group"
+                                draggable
+                                onDragStart={(e) => handleDragStart(e, p.id)}
+                                className="bg-white border border-slate-200/60 hover:border-slate-300 rounded-lg p-4 shadow-2xs hover:shadow-xs transition-all duration-150 relative group cursor-grab active:cursor-grabbing select-none hover:scale-[0.99]"
                               >
                                 <div className="flex items-center justify-between mb-2">
-                                  {getSourceBadge(p.source)}
+                                  <div className="flex items-center gap-1.5">
+                                    <div className="text-slate-300 hover:text-slate-500 cursor-grab flex flex-col gap-[2px] mr-0.5" title="Arraste para mover">
+                                      <div className="flex gap-[2px]">
+                                        <span className="w-1 h-1 rounded-full bg-current"></span>
+                                        <span className="w-1 h-1 rounded-full bg-current"></span>
+                                      </div>
+                                      <div className="flex gap-[2px]">
+                                        <span className="w-1 h-1 rounded-full bg-current"></span>
+                                        <span className="w-1 h-1 rounded-full bg-current"></span>
+                                      </div>
+                                      <div className="flex gap-[2px]">
+                                        <span className="w-1 h-1 rounded-full bg-current"></span>
+                                        <span className="w-1 h-1 rounded-full bg-current"></span>
+                                      </div>
+                                    </div>
+                                    {getSourceBadge(p.source)}
+                                    {getPriorityBadge(p.priority)}
+                                  </div>
                                   
                                   {/* Quick Arrow Movers to easily shift status */}
                                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1661,7 +1804,7 @@ export default function Home() {
                                     </span>
                                   </div>
                                 )}
-                              </motion.div>
+                              </div>
                             ))
                           )}
                         </div>
@@ -1696,6 +1839,7 @@ export default function Home() {
                             <div className="w-2/5 pr-4">
                               <div className="flex items-center gap-2 mb-1">
                                 {getSourceBadge(p.source)}
+                                {getPriorityBadge(p.priority)}
                                 {p.tags.slice(0, 2).map((t) => (
                                   <span key={t} className="text-[9px] font-mono bg-slate-50 border border-slate-100 text-slate-400 px-1 rounded">
                                     {t}
@@ -1918,8 +2062,8 @@ export default function Home() {
                     />
                   </div>
 
-                  {/* Source and Status selectors (Flex box) */}
-                  <div className="grid grid-cols-2 gap-4">
+                  {/* Source, Status and Priority selectors (Flex box) */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                       <label className="block text-xs font-semibold text-slate-700 mb-1">
                         Origem do Projeto
@@ -1930,7 +2074,7 @@ export default function Home() {
                         className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 focus:outline-none focus:border-slate-400"
                       >
                         <option value="external">Projeto Externo</option>
-                        <option value="ai_studio">Este Workspace (AI Studio)</option>
+                        <option value="ai_studio">AI Studio</option>
                       </select>
                     </div>
 
@@ -1943,9 +2087,24 @@ export default function Home() {
                         onChange={(e) => setNewStatus(e.target.value as any)}
                         className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 focus:outline-none focus:border-slate-400"
                       >
-                        <option value="planning">Em Planejamento</option>
-                        <option value="in_progress">Em Desenvolvimento</option>
+                        <option value="planning">Planejamento</option>
+                        <option value="in_progress">Desenvolvimento</option>
                         <option value="completed">Concluído</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Prioridade
+                      </label>
+                      <select
+                        value={newPriority}
+                        onChange={(e) => setNewPriority(e.target.value as any)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm text-slate-700 focus:outline-none focus:border-slate-400"
+                      >
+                        <option value="low">Baixa</option>
+                        <option value="medium">Média</option>
+                        <option value="high">Alta</option>
                       </select>
                     </div>
                   </div>
@@ -2051,6 +2210,7 @@ export default function Home() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1.5">
                       {getSourceBadge(selectedProject.source)}
+                      {getPriorityBadge(selectedProject.priority)}
                       <span className={`text-[10px] font-mono px-2 py-0.5 rounded border ${getStatusColor(selectedProject.status)}`}>
                         {getStatusLabel(selectedProject.status)}
                       </span>
@@ -2157,7 +2317,7 @@ export default function Home() {
                         </div>
 
                         {/* Status Select inside details */}
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                           <div>
                             <label className="block text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider mb-1.5">
                               Status Atual
@@ -2185,6 +2345,21 @@ export default function Home() {
                             >
                               <option value="external">Externo</option>
                               <option value="ai_studio">AI Studio (Daqui)</option>
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider mb-1.5">
+                              Prioridade
+                            </label>
+                            <select
+                              value={selectedProject.priority || "medium"}
+                              onChange={(e) => handleUpdateField(selectedProject.id, "priority", e.target.value as any)}
+                              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs text-slate-700 focus:outline-none focus:border-slate-400"
+                            >
+                              <option value="low">Baixa</option>
+                              <option value="medium">Média</option>
+                              <option value="high">Alta</option>
                             </select>
                           </div>
                         </div>
