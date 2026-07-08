@@ -73,6 +73,7 @@ export default function Home() {
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"bento" | "kanban" | "list">("bento");
+  const [mobileTab, setMobileTab] = useState<"projects" | "stats" | "settings">("projects");
   
   // Modals & Drawers
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
@@ -1156,8 +1157,52 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      {/* Main Header */}
-      <header className="border-b border-slate-100 bg-white/60 backdrop-blur-md sticky top-0 z-30 px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Mobile-Only Header */}
+      <header className="md:hidden border-b border-slate-100 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md sticky top-0 z-30 px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center text-white shadow-xs">
+            <Layers className="w-4 h-4" />
+          </div>
+          <div>
+            <h1 className="text-sm font-bold tracking-tight text-slate-900">
+              {mobileTab === "projects" ? "Projetos" : mobileTab === "stats" ? "Estatísticas" : "Ajustes"}
+            </h1>
+            <p className="text-[9px] text-slate-400 font-mono">
+              Project Hub • {userName}
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          {/* Theme button */}
+          <button
+            onClick={() => setTheme(theme === "light" ? "dark" : "light")}
+            className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-slate-900 transition-all border border-slate-200/50 flex items-center justify-center"
+            title="Alternar Tema"
+          >
+            {theme === "light" ? <Moon className="w-3.5 h-3.5 text-slate-700" /> : <Sun className="w-3.5 h-3.5 text-amber-500" />}
+          </button>
+
+          {/* Locked auth lock */}
+          {accessPassword && (
+            <button
+              onClick={() => {
+                setIsAuthenticated(false);
+                sessionStorage.removeItem("project_hub_auth");
+                localStorage.removeItem("project_hub_auth");
+                showToast("Sessão bloqueada com segurança!", "info");
+              }}
+              className="p-1.5 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-500 transition-all border border-slate-200/50 flex items-center justify-center"
+              title="Bloquear"
+            >
+              <Lock className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* Main Header (Desktop Only) */}
+      <header className="hidden md:flex border-b border-slate-100 bg-white/60 backdrop-blur-md sticky top-0 z-30 px-6 py-4 items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-lg bg-slate-900 flex items-center justify-center text-white shadow-sm">
             <Layers className="w-5 h-5" />
@@ -1270,7 +1315,7 @@ export default function Home() {
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-6 flex flex-col gap-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 flex flex-col gap-6 pb-28 md:pb-6">
         
         {/* Banner de aviso sobre segurança */}
         {!accessPassword && (
@@ -1310,7 +1355,7 @@ export default function Home() {
         )}
         
         {/* Statistics & Overview Dashboard Widget */}
-        <section className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <section className={`${mobileTab === "stats" ? "grid" : "hidden"} md:grid grid-cols-2 md:grid-cols-5 gap-4`}>
           <div className="bg-white border border-slate-100/80 rounded-xl p-4 shadow-sm flex flex-col justify-between">
             <p className="text-xs font-mono text-slate-400">Total Geral</p>
             <div className="flex items-baseline gap-2 mt-2">
@@ -1367,7 +1412,7 @@ export default function Home() {
         </section>
 
         {/* Filter Navigation & Search Bar */}
-        <section className="bg-white border border-slate-100 shadow-sm rounded-xl p-4 flex flex-col gap-4">
+        <section className={`${mobileTab === "projects" ? "flex" : "hidden"} md:flex bg-white border border-slate-100 shadow-sm rounded-xl p-4 flex-col gap-4`}>
           
           {/* Top Line: Search and View Mode buttons */}
           <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
@@ -1507,7 +1552,7 @@ export default function Home() {
         </section>
 
         {/* Dynamic Project Views Container */}
-        <section className="flex-1">
+        <section className={`${mobileTab === "projects" ? "block" : "hidden"} md:block flex-1`}>
           {filteredProjects.length === 0 ? (
             <div className="bg-white border border-slate-100/80 shadow-sm rounded-xl py-12 px-4 flex flex-col items-center text-center">
               <div className="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 mb-3 border border-slate-100">
@@ -1670,7 +1715,7 @@ export default function Home() {
 
               {/* KANBAN BOARD VIEW */}
               {viewMode === "kanban" && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-start">
+                <div className="flex md:grid md:grid-cols-3 overflow-x-auto md:overflow-x-visible pb-4 md:pb-0 gap-6 items-start snap-x snap-mandatory scroll-smooth -mx-4 px-4 md:mx-0 md:px-0">
                   
                   {/* Status Column generator */}
                   {(["planning", "in_progress", "completed"] as Project["status"][]).map((colStatus) => {
@@ -1683,7 +1728,7 @@ export default function Home() {
                         onDragOver={(e) => handleDragOver(e, colStatus)}
                         onDragLeave={() => handleDragLeave(colStatus)}
                         onDrop={(e) => handleDrop(e, colStatus)}
-                        className={`border rounded-xl p-4 flex flex-col gap-4 min-h-[500px] transition-all duration-200 ${
+                        className={`w-[85vw] shrink-0 md:w-auto snap-center border rounded-xl p-4 flex flex-col gap-4 min-h-[500px] transition-all duration-200 ${
                           isOver 
                             ? "bg-slate-100/80 border-slate-400/80 shadow-xs scale-[1.01]" 
                             : "bg-slate-50 border-slate-200/50"
@@ -1928,7 +1973,303 @@ export default function Home() {
           )}
         </section>
 
+        {/* MOBILE-ONLY EXTENDED STATISTICS VIEW */}
+        {mobileTab === "stats" && (
+          <div className="md:hidden space-y-6">
+            {/* AI Mentor Insight Card */}
+            <div className="bg-gradient-to-br from-indigo-50 to-slate-50 border border-indigo-100/50 rounded-xl p-5 shadow-sm">
+              <div className="flex items-center gap-2 mb-3">
+                <Sparkles className="w-5 h-5 text-indigo-500 animate-pulse animate-duration-1000" />
+                <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-800 font-mono">
+                  Conselho do Mentor IA ({aiPersona === "mentor" ? "Tradicional / PM" : aiPersona === "creative" ? "Criativo" : aiPersona === "scrum" ? "Scrum Master" : "Minimalista"})
+                </h4>
+              </div>
+              <p className="text-xs text-slate-600 italic leading-relaxed">
+                {aiPersona === "mentor" 
+                  ? `Você tem ${inProgressCount} projetos ativos no radar. Foque em concluir tarefas de maior prioridade antes de expandir o escopo. Lembre-se: "Feito é melhor que perfeito!"`
+                  : aiPersona === "creative" 
+                  ? `Idéias fluindo! Você tem ${planningCount} projetos em planejamento. Que tal rascunhar as tarefas iniciais de um deles usando o Assistente IA?`
+                  : aiPersona === "scrum" 
+                  ? `O progresso geral do seu espaço de trabalho é de ${globalProgressPercent}%. Continue focado nos cartões em desenvolvimento e evite acumular impedimentos.`
+                  : `Mantenha a simplicidade. ${totalProjectsCount} projetos são suficientes para focar no que realmente importa hoje. Elimine o excesso.`}
+              </p>
+            </div>
+
+            {/* Completed Tasks Log List */}
+            <div className="bg-white border border-slate-100 rounded-xl p-5 space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h3 className="text-sm font-bold text-slate-800">Tarefas Concluídas</h3>
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-mono font-bold px-2 py-0.5 rounded-full">
+                  {completedTasks} concluídas
+                </span>
+              </div>
+
+              {projects.flatMap(p => p.tasks).filter(t => t.completed).length === 0 ? (
+                <div className="text-center py-6 text-xs text-slate-400 font-mono">
+                  Nenhuma tarefa concluída ainda. Comece marcando as caixas de tarefas nos detalhes do projeto!
+                </div>
+              ) : (
+                <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                  {projects.flatMap(p => p.tasks.map(t => ({ ...t, projectName: p.title }))).filter(t => t.completed).slice(0, 15).map((task) => (
+                    <div key={task.id} className="flex items-center gap-3 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                      <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                        <Check className="w-3 h-3" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-xs font-semibold text-slate-700 truncate">{task.title}</p>
+                        <p className="text-[9px] text-slate-400 truncate">Projeto: {task.projectName}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* MOBILE-ONLY SYSTEM SETTINGS VIEW */}
+        {mobileTab === "settings" && (
+          <div className="md:hidden space-y-6">
+            <div className="bg-white border border-slate-100 shadow-sm rounded-xl p-5 space-y-4">
+              {/* Profile Header */}
+              <div className="flex items-center gap-3.5 pb-4 border-b border-slate-100">
+                <div className="w-12 h-12 rounded-full bg-slate-900 text-white flex items-center justify-center font-bold text-lg shadow-sm">
+                  {userName.charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <h4 className="text-sm font-bold text-slate-800 truncate">Olá, {userName}!</h4>
+                  <p className="text-[10px] text-slate-400 font-mono truncate">
+                    Preferências do Project Hub
+                  </p>
+                </div>
+              </div>
+
+              {/* Settings Form Body */}
+              <div className="space-y-4">
+                {/* Username */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block">
+                    Nome de Usuário
+                  </label>
+                  <input
+                    type="text"
+                    value={tempUserName}
+                    onChange={(e) => setTempUserName(e.target.value)}
+                    placeholder="Ex: João Silva"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-slate-400 transition-colors"
+                  />
+                </div>
+
+                {/* AI Persona */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block">
+                    Persona do Mentor IA
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { id: "mentor", label: "Tradicional", desc: "Equilíbrio técnico" },
+                      { id: "scrum", label: "Scrum Master", desc: "Agilidade e prazos" },
+                      { id: "creative", label: "Criativo", desc: "Fora da caixa" },
+                      { id: "minimalist", label: "Minimalista", desc: "Foco no essencial" }
+                    ].map((persona) => (
+                      <button
+                        key={persona.id}
+                        type="button"
+                        onClick={() => setTempAiPersona(persona.id)}
+                        className={`p-2 rounded-lg border text-left transition-all ${
+                          tempAiPersona === persona.id
+                            ? "border-slate-900 bg-slate-900/5 ring-1 ring-slate-900"
+                            : "border-slate-200 hover:bg-slate-50"
+                        }`}
+                      >
+                        <span className="text-[11px] font-bold text-slate-800 block">{persona.label}</span>
+                        <span className="text-[9px] text-slate-400 leading-tight block mt-0.5">{persona.desc}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Default View Mode */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block">
+                    Visualização de Entrada
+                  </label>
+                  <select
+                    value={tempDefaultViewMode}
+                    onChange={(e) => setTempDefaultViewMode(e.target.value as any)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-slate-400"
+                  >
+                    <option value="bento">Bento Grid (Painel)</option>
+                    <option value="kanban">Quadro Kanban</option>
+                    <option value="list">Lista Compacta</option>
+                  </select>
+                </div>
+
+                {/* Password Lock protection */}
+                <div className="pt-2 border-t border-slate-100 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-wider block">
+                        Senha de Acesso
+                      </span>
+                      <span className="text-[9px] text-slate-400 leading-none">Proteger hub com senha</span>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={isPasswordProtected}
+                        onChange={(e) => setIsPasswordProtected(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-8 h-4 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-slate-900"></div>
+                    </label>
+                  </div>
+
+                  {isPasswordProtected && (
+                    <div className="space-y-1">
+                      <input
+                        type="password"
+                        value={tempPassword}
+                        onChange={(e) => setTempPassword(e.target.value)}
+                        placeholder="Insira a nova senha secreta"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-slate-400"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Save button */}
+                <button
+                  onClick={() => handleSaveSettings(tempUserName, tempAiPersona, tempDefaultViewMode, tempTheme)}
+                  className="w-full bg-slate-900 hover:bg-slate-800 text-white py-2.5 rounded-lg text-xs font-bold transition-all shadow-sm"
+                >
+                  Salvar Preferências
+                </button>
+              </div>
+            </div>
+
+            {/* Backup & System operations */}
+            <div className="bg-white border border-slate-100 shadow-sm rounded-xl p-5 space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono">
+                Importar & Exportar Backup
+              </h4>
+              <p className="text-[10px] text-slate-400 leading-relaxed">
+                Exporte todos os projetos em um arquivo local ou restaure backups JSON salvos anteriormente.
+              </p>
+              
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  onClick={handleExportBackup}
+                  className="bg-slate-50 border border-slate-200 hover:bg-slate-100 rounded-lg p-2.5 text-center flex flex-col items-center justify-center gap-1.5 text-slate-700 transition-all text-xs font-medium cursor-pointer"
+                >
+                  <Download className="w-4 h-4 text-slate-500" />
+                  <span>Exportar JSON</span>
+                </button>
+
+                <label className="bg-slate-50 border border-slate-200 hover:bg-slate-100 rounded-lg p-2.5 text-center flex flex-col items-center justify-center gap-1.5 text-slate-700 transition-all text-xs font-medium cursor-pointer">
+                  <Upload className="w-4 h-4 text-slate-500" />
+                  <span>Importar JSON</span>
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={handleImportBackup}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Dangerous action */}
+            <div className="bg-red-50/50 border border-red-100 rounded-xl p-5 space-y-3">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-red-600 font-mono">
+                Ações Irreversíveis
+              </h4>
+              
+              <button
+                onClick={() => {
+                  setConfirmDialog({
+                    isOpen: true,
+                    title: "Zerar todos os projetos?",
+                    description: "Essa ação removerá permanentemente todos os projetos e tarefas criadas localmente e na nuvem.",
+                    actionLabel: "Zerar Dados",
+                    isDanger: true,
+                    onConfirm: async () => {
+                      setProjects([]);
+                      localStorage.removeItem("project_hub_projects");
+                      showToast("Hub reinicializado com sucesso!", "success");
+                    }
+                  });
+                }}
+                className="w-full border border-red-200 bg-white hover:bg-red-50 text-red-700 py-2 rounded-lg text-xs font-bold transition-all"
+              >
+                Limpar Todos os Projetos
+              </button>
+            </div>
+          </div>
+        )}
+
       </main>
+
+      {/* MOBILE BOTTOM NAVIGATION */}
+      <div className="fixed bottom-0 left-0 right-0 z-40 md:hidden bg-white/90 backdrop-blur-md border-t border-slate-200/50 flex justify-around items-center py-2 px-4 shadow-lg pb-safe">
+        <button
+          onClick={() => setMobileTab("projects")}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
+            mobileTab === "projects" 
+              ? "text-slate-900 font-semibold scale-105" 
+              : "text-slate-400 hover:text-slate-600"
+          }`}
+        >
+          <FolderDot className="w-5 h-5" />
+          <span className="text-[10px] font-medium font-sans">Projetos</span>
+        </button>
+
+        <button
+          onClick={() => setMobileTab("stats")}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
+            mobileTab === "stats" 
+              ? "text-slate-900 font-semibold scale-105" 
+              : "text-slate-400 hover:text-slate-600"
+          }`}
+        >
+          <BarChart2 className="w-5 h-5" />
+          <span className="text-[10px] font-medium font-sans">Métricas</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setTempUserName(userName);
+            setTempAiPersona(aiPersona);
+            setTempDefaultViewMode(defaultViewMode);
+            setTempTheme(theme);
+            setIsPasswordProtected(!!accessPassword);
+            setTempPassword(accessPassword || "");
+            setMobileTab("settings");
+          }}
+          className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
+            mobileTab === "settings" 
+              ? "text-slate-900 font-semibold scale-105" 
+              : "text-slate-400 hover:text-slate-600"
+          }`}
+        >
+          <Sliders className="w-5 h-5" />
+          <span className="text-[10px] font-medium font-sans">Ajustes</span>
+        </button>
+      </div>
+
+      {/* MOBILE FLOATING ACTION BUTTON (FAB) */}
+      {mobileTab === "projects" && (
+        <motion.button
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          whileTap={{ scale: 0.9 }}
+          onClick={() => setIsNewProjectModalOpen(true)}
+          className="fixed bottom-20 right-5 z-40 md:hidden w-12 h-12 rounded-full bg-slate-900 text-white flex items-center justify-center shadow-lg active:bg-slate-800 transition-colors cursor-pointer"
+          title="Novo Projeto"
+        >
+          <Plus className="w-6 h-6 text-white" />
+        </motion.button>
+      )}
 
       {/* Footer Branding and clock */}
       <footer className="border-t border-slate-100 bg-white py-6 px-6 text-center text-xs text-slate-400 font-mono">
