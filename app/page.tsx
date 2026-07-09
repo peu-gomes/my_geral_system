@@ -1782,7 +1782,7 @@ export default function Home() {
                                   </div>
                                   
                                   {/* Quick Arrow Movers to easily shift status */}
-                                  <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                                     {colStatus !== "planning" && (
                                       <button
                                         onClick={() => {
@@ -2271,16 +2271,7 @@ export default function Home() {
         </motion.button>
       )}
 
-      {/* Footer Branding and clock */}
-      <footer className="border-t border-slate-100 bg-white py-6 px-6 text-center text-xs text-slate-400 font-mono">
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-          <p>Project Hub © 2026. Feito com simplicidade técnica.</p>
-          <div className="flex items-center gap-2 text-[11px]">
-            <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
-            <span>Sincronizado via Local Storage</span>
-          </div>
-        </div>
-      </footer>
+
 
       {/* ========================================================================= */}
       {/* DIALOG: NEW PROJECT MODAL */}
