@@ -1754,103 +1754,182 @@ export default function Home() {
                               Sem projetos
                             </div>
                           ) : (
-                            colProjects.map((p) => (
+                            colProjects.map((p) => {
+                            const progress = getProjectProgress(p);
+                            return (
                               <div
                                 key={p.id}
+                                id={`kanban-card-${p.id}`}
                                 draggable
                                 onDragStart={(e) => handleDragStart(e, p.id)}
-                                className="bg-white border border-slate-200/60 hover:border-slate-300 rounded-lg p-4 shadow-2xs hover:shadow-xs transition-all duration-150 relative group cursor-grab active:cursor-grabbing select-none hover:scale-[0.99]"
+                                className="bg-white border border-slate-200/50 hover:border-slate-300 rounded-xl shadow-xs hover:shadow-sm transition-all duration-150 flex flex-col h-full group cursor-grab active:cursor-grabbing select-none hover:scale-[0.99]"
                               >
-                                <div className="flex items-center justify-between mb-2">
-                                  <div className="flex items-center gap-1.5">
-                                    <div className="text-slate-300 hover:text-slate-500 cursor-grab flex flex-col gap-[2px] mr-0.5" title="Arraste para mover">
-                                      <div className="flex gap-[2px]">
-                                        <span className="w-1 h-1 rounded-full bg-current"></span>
-                                        <span className="w-1 h-1 rounded-full bg-current"></span>
+                                {/* Card Body */}
+                                <div className="p-4 flex-1 flex flex-col justify-between">
+                                  <div>
+                                    <div className="flex items-center justify-between gap-2 mb-2.5">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <div className="text-slate-300 hover:text-slate-500 cursor-grab flex flex-col gap-[2px] mr-0.5 shrink-0" title="Arraste para mover">
+                                          <div className="flex gap-[2px]">
+                                            <span className="w-1 h-1 rounded-full bg-current"></span>
+                                            <span className="w-1 h-1 rounded-full bg-current"></span>
+                                          </div>
+                                          <div className="flex gap-[2px]">
+                                            <span className="w-1 h-1 rounded-full bg-current"></span>
+                                            <span className="w-1 h-1 rounded-full bg-current"></span>
+                                          </div>
+                                          <div className="flex gap-[2px]">
+                                            <span className="w-1 h-1 rounded-full bg-current"></span>
+                                            <span className="w-1 h-1 rounded-full bg-current"></span>
+                                          </div>
+                                        </div>
+                                        {getSourceBadge(p.source)}
+                                        {getPriorityBadge(p.priority)}
                                       </div>
-                                      <div className="flex gap-[2px]">
-                                        <span className="w-1 h-1 rounded-full bg-current"></span>
-                                        <span className="w-1 h-1 rounded-full bg-current"></span>
-                                      </div>
-                                      <div className="flex gap-[2px]">
-                                        <span className="w-1 h-1 rounded-full bg-current"></span>
-                                        <span className="w-1 h-1 rounded-full bg-current"></span>
+                                      
+                                      {/* Quick Arrow Movers to easily shift status */}
+                                      <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity shrink-0">
+                                        {colStatus !== "planning" && (
+                                          <button
+                                            onClick={() => {
+                                              const prevs: Project["status"][] = ["planning", "in_progress", "completed"];
+                                              const currIdx = prevs.indexOf(colStatus);
+                                              handleMoveStatus(p.id, prevs[currIdx - 1]);
+                                            }}
+                                            title="Mover para esquerda"
+                                            className="p-1 bg-slate-50 hover:bg-slate-100 rounded text-slate-500 hover:text-slate-900 border border-slate-200 cursor-pointer"
+                                          >
+                                            <ChevronRight className="w-3 h-3 rotate-180" />
+                                          </button>
+                                        )}
+                                        {colStatus !== "completed" && (
+                                          <button
+                                            onClick={() => {
+                                              const nexts: Project["status"][] = ["planning", "in_progress", "completed"];
+                                              const currIdx = nexts.indexOf(colStatus);
+                                              handleMoveStatus(p.id, nexts[currIdx + 1]);
+                                            }}
+                                            title="Mover para direita"
+                                            className="p-1 bg-slate-50 hover:bg-slate-100 rounded text-slate-500 hover:text-slate-900 border border-slate-200 cursor-pointer"
+                                          >
+                                            <ChevronRight className="w-3 h-3" />
+                                          </button>
+                                        )}
                                       </div>
                                     </div>
-                                    {getSourceBadge(p.source)}
-                                    {getPriorityBadge(p.priority)}
-                                  </div>
-                                  
-                                  {/* Quick Arrow Movers to easily shift status */}
-                                  <div className="flex items-center gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                                    {colStatus !== "planning" && (
-                                      <button
-                                        onClick={() => {
-                                          const prevs: Project["status"][] = ["planning", "in_progress", "completed"];
-                                          const currIdx = prevs.indexOf(colStatus);
-                                          handleMoveStatus(p.id, prevs[currIdx - 1]);
-                                        }}
-                                        title="Mover para esquerda"
-                                        className="p-1 bg-slate-50 hover:bg-slate-100 rounded text-slate-500 hover:text-slate-900 border border-slate-200"
-                                      >
-                                        <ChevronRight className="w-3 h-3 rotate-180" />
-                                      </button>
+
+                                    {p.updatedAt && (
+                                      <div className="text-[10px] text-slate-400 font-mono mb-2">
+                                        {formatLastUpdated(p.updatedAt)}
+                                      </div>
                                     )}
-                                    {colStatus !== "completed" && (
-                                      <button
-                                        onClick={() => {
-                                          const nexts: Project["status"][] = ["planning", "in_progress", "completed"];
-                                          const currIdx = nexts.indexOf(colStatus);
-                                          handleMoveStatus(p.id, nexts[currIdx + 1]);
-                                        }}
-                                        title="Mover para direita"
-                                        className="p-1 bg-slate-50 hover:bg-slate-100 rounded text-slate-500 hover:text-slate-900 border border-slate-200"
-                                      >
-                                        <ChevronRight className="w-3 h-3" />
-                                      </button>
+
+                                    <button
+                                      onClick={() => {
+                                        setSelectedProjectId(p.id);
+                                        setDrawerTab("general");
+                                        setIsDetailsDrawerOpen(true);
+                                      }}
+                                      className="text-left block w-full cursor-pointer"
+                                    >
+                                      <h4 className="font-semibold text-slate-800 hover:text-slate-950 text-sm leading-tight group-hover:translate-x-0.5 transition-transform duration-200 flex items-center gap-1">
+                                        {p.title}
+                                        <ChevronRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 transition-opacity text-slate-400 shrink-0" />
+                                      </h4>
+                                    </button>
+
+                                    <p className="text-xs text-slate-500 mt-2 line-clamp-3 leading-relaxed">
+                                      {p.description || "Nenhuma descrição fornecida."}
+                                    </p>
+                                  </div>
+
+                                  <div className="mt-4">
+                                    {/* Tags cloud */}
+                                    {p.tags.length > 0 && (
+                                      <div className="flex flex-wrap gap-1 mb-3">
+                                        {p.tags.map((t) => (
+                                          <span key={t} className="text-[10px] bg-slate-50 text-slate-500 border border-slate-200/40 px-1.5 py-0.5 rounded">
+                                            {t}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+
+                                    {/* Task progression slider */}
+                                    {p.tasks.length > 0 ? (
+                                      <div className="space-y-1">
+                                        <div className="flex items-center justify-between text-[10px] font-mono text-slate-400">
+                                          <span>Progresso</span>
+                                          <span>{progress}% ({p.tasks.filter(t => t.completed).length}/{p.tasks.length})</span>
+                                        </div>
+                                        <div className="w-full bg-slate-100 h-1 rounded-full overflow-hidden">
+                                          <div 
+                                            className="bg-slate-800 h-full transition-all duration-300"
+                                            style={{ width: `${progress}%` }}
+                                          />
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 pt-1">
+                                        <span>Checklist vazio</span>
+                                        <button
+                                          onClick={() => {
+                                            setSelectedProjectId(p.id);
+                                            setDrawerTab("tasks");
+                                            setIsDetailsDrawerOpen(true);
+                                          }}
+                                          className="text-slate-600 hover:underline flex items-center gap-0.5 font-sans cursor-pointer"
+                                        >
+                                          + Criar metas
+                                        </button>
+                                      </div>
                                     )}
                                   </div>
                                 </div>
 
-                                <button
-                                  onClick={() => {
-                                    setSelectedProjectId(p.id);
-                                    setDrawerTab("general");
-                                    setIsDetailsDrawerOpen(true);
-                                  }}
-                                  className="text-left w-full"
-                                >
-                                  <h4 className="font-semibold text-slate-800 text-sm hover:underline">
-                                    {p.title}
-                                  </h4>
-                                </button>
-
-                                <p className="text-[11px] text-slate-400 mt-1 line-clamp-2 leading-normal">
-                                  {p.description}
-                                </p>
-
-                                {p.updatedAt && (
-                                  <div className="text-[9px] text-slate-400 font-mono mt-1.5">
-                                    {formatLastUpdated(p.updatedAt)}
+                                {/* Card Footer Actions */}
+                                <div className="border-t border-slate-100 px-4 py-3 bg-slate-50/50 flex items-center justify-between rounded-b-xl text-slate-400">
+                                  <div className="flex items-center gap-2">
+                                    {p.links.github && (
+                                      <a href={p.links.github} target="_blank" rel="noreferrer" title="Ver código no GitHub" className="hover:text-slate-900 transition-colors">
+                                        <Github className="w-4 h-4" />
+                                      </a>
+                                    )}
+                                    {p.links.deploy && (
+                                      <a href={p.links.deploy} target="_blank" rel="noreferrer" title="Acessar deploy online" className="hover:text-slate-900 transition-colors">
+                                        <ExternalLink className="w-4 h-4" />
+                                      </a>
+                                    )}
+                                    {p.links.workspace && (
+                                      <a href={p.links.workspace} target="_blank" rel="noreferrer" title="Workspace AI Studio" className="hover:text-indigo-600 transition-colors flex items-center gap-0.5">
+                                        <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+                                      </a>
+                                    )}
                                   </div>
-                                )}
 
-                                {/* Mini tasks summary */}
-                                {p.tasks.length > 0 && (
-                                  <div className="mt-3 flex items-center justify-between">
-                                    <div className="w-1/2 bg-slate-100 h-1 rounded-full overflow-hidden">
-                                      <div 
-                                        className="bg-slate-800 h-full"
-                                        style={{ width: `${getProjectProgress(p)}%` }}
-                                      />
-                                    </div>
-                                    <span className="text-[9px] font-mono text-slate-400">
-                                      {p.tasks.filter(t => t.completed).length}/{p.tasks.length}
-                                    </span>
+                                  <div className="flex items-center gap-1.5">
+                                    {p.aiRoadmap && (
+                                      <span className="flex items-center gap-0.5 text-[9px] text-indigo-600 font-mono bg-indigo-50/70 border border-indigo-100/60 px-1 py-0.5 rounded shrink-0">
+                                        <Sparkle className="w-2 h-2" />
+                                        IA Mentor
+                                      </span>
+                                    )}
+                                    
+                                    <button
+                                      onClick={() => {
+                                        setSelectedProjectId(p.id);
+                                        setDrawerTab("general");
+                                        setIsDetailsDrawerOpen(true);
+                                      }}
+                                      className="text-xs text-slate-600 hover:text-slate-900 font-medium transition-colors cursor-pointer"
+                                    >
+                                      Ver Detalhes
+                                    </button>
                                   </div>
-                                )}
+                                </div>
                               </div>
-                            ))
+                            );
+                          })
                           )}
                         </div>
 
@@ -2516,7 +2595,7 @@ export default function Home() {
       {/* ========================================================================= */}
       <AnimatePresence>
         {isDetailsDrawerOpen && selectedProject && (
-          <div className="fixed inset-0 z-40 overflow-hidden">
+          <div className="fixed inset-0 z-50 overflow-hidden">
             
             {/* Drawer Backdrop */}
             <motion.div
@@ -2528,13 +2607,13 @@ export default function Home() {
             />
 
             {/* Slide over layout panel */}
-            <div className="absolute inset-y-0 right-0 max-w-full pl-10 flex">
+            <div className="absolute inset-y-0 right-0 max-w-full pl-0 md:pl-10 flex">
               <motion.div
                 initial={{ x: "100%" }}
                 animate={{ x: 0 }}
                 exit={{ x: "100%" }}
                 transition={{ type: "spring", damping: 25, stiffness: 200 }}
-                className="w-screen max-w-xl bg-white border-l border-slate-200/80 shadow-2xl flex flex-col h-full"
+                className="w-screen max-w-full md:max-w-xl bg-white border-l border-slate-200/80 shadow-2xl flex flex-col h-full"
               >
                 
                 {/* Header detail */}
