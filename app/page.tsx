@@ -43,7 +43,8 @@ import {
   EyeOff,
   AlertCircle,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  RefreshCw
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import { INITIAL_PROJECTS, Project, Task } from "@/lib/initial-projects";
@@ -74,6 +75,14 @@ export default function Home() {
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"bento" | "kanban" | "list">("bento");
   const [mobileTab, setMobileTab] = useState<"projects" | "stats" | "settings">("projects");
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
+  
+  // Pull to refresh mobile state
+  const [startY, setStartY] = useState(0);
+  const [currentY, setCurrentY] = useState(0);
+  const [pullProgress, setPullProgress] = useState(0); // 0 to 100
+  const [isPulling, setIsPulling] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Modals & Drawers
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
@@ -292,6 +301,83 @@ export default function Home() {
     } finally {
       setIsSyncing(false);
     }
+  };
+
+  const handleRefreshData = async () => {
+    setIsSyncing(true);
+    try {
+      // 1. Fetch settings from Firestore
+      const dbSettings = await getDbSettings();
+      if (dbSettings) {
+        if (dbSettings.userName) setUserName(dbSettings.userName);
+        if (dbSettings.aiPersona) setAiPersona(dbSettings.aiPersona);
+        if (dbSettings.defaultViewMode) {
+          setDefaultViewMode(dbSettings.defaultViewMode);
+        }
+        if (dbSettings.theme) setTheme(dbSettings.theme);
+        if (dbSettings.accessPassword) {
+          setAccessPassword(dbSettings.accessPassword);
+          setIsPasswordProtected(true);
+        }
+      }
+      
+      // 2. Fetch projects from Firestore
+      const dbProjects = await getDbProjects();
+      if (dbProjects && dbProjects.length > 0) {
+        setProjects(dbProjects);
+        localStorage.setItem("project_hub_projects", JSON.stringify(dbProjects));
+      }
+      showToast("Sincronizado com o servidor com sucesso!", "success");
+    } catch (err) {
+      console.error("Refresh error:", err);
+      showToast("Erro ao sincronizar. Usando cache local.", "error");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  // Pull to Refresh Touch Handlers
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (window.scrollY === 0 && !isRefreshing) {
+      setStartY(e.touches[0].clientY);
+      setCurrentY(e.touches[0].clientY);
+      setIsPulling(true);
+    }
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isPulling || isRefreshing) return;
+    
+    const y = e.touches[0].clientY;
+    setCurrentY(y);
+    
+    const diff = y - startY;
+    if (diff > 0) {
+      const dragLimit = 150;
+      const progress = Math.min(100, (diff / dragLimit) * 100);
+      setPullProgress(progress);
+    } else {
+      setPullProgress(0);
+    }
+  };
+
+  const handleTouchEnd = async () => {
+    if (!isPulling || isRefreshing) return;
+    
+    setIsPulling(false);
+    const diff = currentY - startY;
+    
+    if (diff > 80 && pullProgress >= 60) {
+      setIsRefreshing(true);
+      setPullProgress(100);
+      await handleRefreshData();
+    }
+    
+    // Smooth reset
+    setPullProgress(0);
+    setStartY(0);
+    setCurrentY(0);
+    setIsRefreshing(false);
   };
 
   const showToast = (message: string, type: "success" | "error" | "info" = "success") => {
@@ -981,6 +1067,12 @@ export default function Home() {
   // Extract unique tags
   const allTags = Array.from(new Set(projects.flatMap((p) => p.tags)));
 
+  const activeFiltersCount = 
+    (statusFilter !== "all" ? 1 : 0) +
+    (sourceFilter !== "all" ? 1 : 0) +
+    (priorityFilter !== "all" ? 1 : 0) +
+    (selectedTag ? 1 : 0);
+
   // Calculate task percentage for single project
   const getProjectProgress = (p: Project) => {
     if (p.tasks.length === 0) return 0;
@@ -1122,8 +1214,40 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col font-sans relative">
+    <div 
+      className="min-h-screen flex flex-col font-sans relative"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
       
+      {/* PULL TO REFRESH MOBILE INDICATOR */}
+      <div 
+        className="fixed left-0 right-0 z-50 flex justify-center pointer-events-none transition-all duration-150 md:hidden"
+        style={{ 
+          top: isRefreshing ? "70px" : `${Math.min(120, pullProgress * 1.2 + 20)}px`,
+          opacity: isPulling || isRefreshing ? 1 : 0,
+          transform: `scale(${isPulling || isRefreshing ? 1 : 0.8})`
+        }}
+      >
+        <div className="bg-white dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700/80 px-4 py-2 rounded-full shadow-lg flex items-center gap-2 text-xs font-semibold text-slate-800 dark:text-slate-200">
+          {isRefreshing ? (
+            <>
+              <Loader2 className="w-4 h-4 text-slate-900 dark:text-white animate-spin" />
+              <span>Sincronizando...</span>
+            </>
+          ) : (
+            <>
+              <RefreshCw 
+                className="w-4 h-4 text-slate-500 transition-transform duration-75" 
+                style={{ transform: `rotate(${pullProgress * 3.6}deg)` }} 
+              />
+              <span>{pullProgress >= 60 ? "Solte para atualizar" : "Puxe para atualizar"}</span>
+            </>
+          )}
+        </div>
+      </div>
+
       {/* Dynamic Alert Banner */}
       <AnimatePresence>
         {notification && (
@@ -1412,142 +1536,196 @@ export default function Home() {
         </section>
 
         {/* Filter Navigation & Search Bar */}
-        <section className={`${mobileTab === "projects" ? "flex" : "hidden"} md:flex bg-white border border-slate-100 shadow-sm rounded-xl p-4 flex-col gap-4`}>
+        <section className={`${mobileTab === "projects" ? "flex" : "hidden"} md:flex sticky top-[57px] md:relative md:top-0 z-20 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b md:border border-slate-100 dark:border-slate-800 -mx-4 px-4 py-2.5 md:mx-0 md:px-4 md:py-4 md:rounded-xl md:shadow-sm flex-col gap-2.5 md:gap-4 shadow-sm`}>
           
-          {/* Top Line: Search and View Mode buttons */}
-          <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center justify-between">
+          {/* Top Line: Search, Filter Toggle and View Mode buttons */}
+          <div className="flex flex-row gap-2.5 items-center justify-between w-full">
             
             {/* Search Input */}
-            <div className="relative flex-1 max-w-md">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 placeholder="Buscar por título, descrição ou tags..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-10 pr-4 py-2 text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-400 transition-all"
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-9 pr-8 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-slate-400 dark:bg-slate-950/40"
               />
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600 font-mono"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 hover:text-slate-600 font-mono"
                 >
-                  limpar
+                  <X className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
 
-            {/* Quick Filter Selects */}
-            <div className="flex flex-wrap items-center gap-2">
-              
-              {/* Source filter */}
-              <select
-                value={sourceFilter}
-                onChange={(e) => setSourceFilter(e.target.value)}
-                className="bg-slate-50 border border-slate-200 text-slate-700 py-1.5 px-2.5 rounded-lg text-xs focus:outline-none focus:border-slate-400"
+            {/* Mobile Toggle Button for Filters */}
+            <button
+              onClick={() => setShowMobileFilters(!showMobileFilters)}
+              className={`md:hidden flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold border transition-all shrink-0 cursor-pointer ${
+                showMobileFilters
+                  ? "bg-slate-900 border-slate-950 text-white dark:bg-white dark:border-white dark:text-slate-950"
+                  : "bg-white border-slate-200 text-slate-700 hover:bg-slate-50 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-300"
+              }`}
+            >
+              <Sliders className="w-3.5 h-3.5" />
+              {activeFiltersCount > 0 && (
+                <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold ${
+                  showMobileFilters
+                    ? "bg-white text-slate-900 dark:bg-slate-950 dark:text-white"
+                    : "bg-slate-900 text-white dark:bg-white dark:text-slate-900"
+                }`}>
+                  {activeFiltersCount}
+                </span>
+              )}
+            </button>
+
+            {/* View mode toggle buttons */}
+            <div className="bg-slate-100 dark:bg-slate-800/85 p-0.5 rounded-lg flex items-center shrink-0">
+              <button
+                onClick={() => setViewMode("bento")}
+                className={`p-1.5 rounded-md transition-all cursor-pointer ${
+                  viewMode === "bento" 
+                    ? "bg-white text-slate-900 shadow-xs dark:bg-slate-700 dark:text-white" 
+                    : "text-slate-400 hover:text-slate-600 dark:text-slate-500"
+                }`}
+                title="Visualização Bento Grid"
               >
-                <option value="all">Todas Fontes</option>
-                <option value="ai_studio">AI Studio</option>
-                <option value="external">Projetos Externos</option>
-              </select>
-
-              {/* Status filter */}
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="bg-slate-50 border border-slate-200 text-slate-700 py-1.5 px-2.5 rounded-lg text-xs focus:outline-none focus:border-slate-400"
+                <LayoutGrid className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => setViewMode("kanban")}
+                className={`p-1.5 rounded-md transition-all cursor-pointer ${
+                  viewMode === "kanban" 
+                    ? "bg-white text-slate-900 shadow-xs dark:bg-slate-700 dark:text-white" 
+                    : "text-slate-400 hover:text-slate-600 dark:text-slate-500"
+                }`}
+                title="Visualização Quadro Kanban"
               >
-                <option value="all">Todos Status</option>
-                <option value="planning">Em Planejamento</option>
-                <option value="in_progress">Em Desenvolvimento</option>
-                <option value="completed">Concluídos</option>
-                <option value="archived">Arquivados</option>
-              </select>
-
-              {/* Priority filter */}
-              <select
-                value={priorityFilter}
-                onChange={(e) => setPriorityFilter(e.target.value)}
-                className="bg-slate-50 border border-slate-200 text-slate-700 py-1.5 px-2.5 rounded-lg text-xs focus:outline-none focus:border-slate-400"
+                <Layers2 className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => setViewMode("list")}
+                className={`p-1.5 rounded-md transition-all cursor-pointer ${
+                  viewMode === "list" 
+                    ? "bg-white text-slate-900 shadow-xs dark:bg-slate-700 dark:text-white" 
+                    : "text-slate-400 hover:text-slate-600 dark:text-slate-500"
+                }`}
+                title="Visualização em Lista"
               >
-                <option value="all">Todas Prioridades</option>
-                <option value="high">Alta Prioridade</option>
-                <option value="medium">Média Prioridade</option>
-                <option value="low">Baixa Prioridade</option>
-              </select>
-
-              <div className="h-4 w-px bg-slate-200 mx-1 hidden sm:block" />
-
-              {/* View mode toggle buttons */}
-              <div className="bg-slate-100 p-0.5 rounded-lg flex items-center">
-                <button
-                  onClick={() => setViewMode("bento")}
-                  className={`p-1.5 rounded-md transition-all ${
-                    viewMode === "bento" 
-                      ? "bg-white text-slate-900 shadow-xs" 
-                      : "text-slate-400 hover:text-slate-600"
-                  }`}
-                  title="Visualização Bento Grid"
-                >
-                  <LayoutGrid className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={() => setViewMode("kanban")}
-                  className={`p-1.5 rounded-md transition-all ${
-                    viewMode === "kanban" 
-                      ? "bg-white text-slate-900 shadow-xs" 
-                      : "text-slate-400 hover:text-slate-600"
-                  }`}
-                  title="Visualização Quadro Kanban"
-                >
-                  <Layers2 className="w-3.5 h-3.5" />
-                </button>
-                <button
-                  onClick={() => setViewMode("list")}
-                  className={`p-1.5 rounded-md transition-all ${
-                    viewMode === "list" 
-                      ? "bg-white text-slate-900 shadow-xs" 
-                      : "text-slate-400 hover:text-slate-600"
-                  }`}
-                  title="Visualização em Lista"
-                >
-                  <List className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
+                <List className="w-3.5 h-3.5" />
+              </button>
             </div>
+
           </div>
 
-          {/* Bottom Line: Tags Cloud filtration */}
-          {allTags.length > 0 && (
-            <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-slate-50">
-              <span className="text-[10px] font-mono text-slate-400 mr-1.5 uppercase tracking-wider">Filtrar por Tag:</span>
-              <button
-                onClick={() => setSelectedTag(null)}
-                className={`text-xs px-2 py-1 rounded-md transition-all ${
-                  !selectedTag 
-                    ? "bg-slate-950 text-white font-medium" 
-                    : "bg-slate-50 text-slate-500 hover:bg-slate-100"
-                }`}
-              >
-                Todas
-              </button>
-              {allTags.map((tag) => (
-                <button
-                  key={tag}
-                  onClick={() => setSelectedTag(tag === selectedTag ? null : tag)}
-                  className={`text-xs px-2 py-1 rounded-md transition-all flex items-center gap-1 ${
-                    selectedTag === tag 
-                      ? "bg-slate-950 text-white font-medium" 
-                      : "bg-slate-50 text-slate-500 hover:bg-slate-100"
-                  }`}
+          {/* Quick Filter Selects & Tags Cloud (Collapsible on mobile, always visible on desktop) */}
+          <div className={`${showMobileFilters ? "flex" : "hidden"} md:flex flex-col gap-3 pt-2.5 border-t border-slate-100 dark:border-slate-800/80`}>
+            
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {/* Source filter */}
+              <div className="space-y-1">
+                <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Origem</span>
+                <select
+                  value={sourceFilter}
+                  onChange={(e) => setSourceFilter(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-700 py-1.5 px-2.5 rounded-lg text-xs focus:outline-none focus:border-slate-400 dark:bg-slate-900/40 dark:border-slate-700 dark:text-slate-300"
                 >
-                  <Tag className="w-2.5 h-2.5 opacity-60" />
-                  {tag}
-                </button>
-              ))}
+                  <option value="all">Todas Fontes</option>
+                  <option value="ai_studio">AI Studio</option>
+                  <option value="external">Projetos Externos</option>
+                </select>
+              </div>
+
+              {/* Status filter */}
+              <div className="space-y-1">
+                <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Status</span>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-700 py-1.5 px-2.5 rounded-lg text-xs focus:outline-none focus:border-slate-400 dark:bg-slate-900/40 dark:border-slate-700 dark:text-slate-300"
+                >
+                  <option value="all">Todos Status</option>
+                  <option value="planning">Em Planejamento</option>
+                  <option value="in_progress">Em Desenvolvimento</option>
+                  <option value="completed">Concluídos</option>
+                  <option value="archived">Arquivados</option>
+                </select>
+              </div>
+
+              {/* Priority filter */}
+              <div className="space-y-1">
+                <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Prioridade</span>
+                <select
+                  value={priorityFilter}
+                  onChange={(e) => setPriorityFilter(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 text-slate-700 py-1.5 px-2.5 rounded-lg text-xs focus:outline-none focus:border-slate-400 dark:bg-slate-900/40 dark:border-slate-700 dark:text-slate-300"
+                >
+                  <option value="all">Todas Prioridades</option>
+                  <option value="high">Alta Prioridade</option>
+                  <option value="medium">Média Prioridade</option>
+                  <option value="low">Baixa Prioridade</option>
+                </select>
+              </div>
             </div>
-          )}
+
+            {/* Tags Cloud filtration */}
+            {allTags.length > 0 && (
+              <div className="flex flex-col gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                <span className="text-[10px] font-mono text-slate-400 uppercase tracking-wider block">Filtrar por Tag</span>
+                <div className="flex flex-wrap gap-1">
+                  <button
+                    onClick={() => setSelectedTag(null)}
+                    className={`text-[10px] px-2 py-1 rounded-md transition-all cursor-pointer ${
+                      !selectedTag 
+                        ? "bg-slate-900 text-white font-medium dark:bg-white dark:text-slate-900" 
+                        : "bg-slate-50 text-slate-500 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-400"
+                    }`}
+                  >
+                    Todas
+                  </button>
+                  {allTags.map((tag) => (
+                    <button
+                      key={tag}
+                      onClick={() => setSelectedTag(tag === selectedTag ? null : tag)}
+                      className={`text-[10px] px-2 py-1 rounded-md transition-all flex items-center gap-1 cursor-pointer ${
+                        selectedTag === tag 
+                          ? "bg-slate-900 text-white font-medium dark:bg-white dark:text-slate-900" 
+                          : "bg-slate-50 text-slate-500 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-400"
+                      }`}
+                    >
+                      <Tag className="w-2.5 h-2.5 opacity-60" />
+                      {tag}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Clear Filters Helper Action */}
+            {activeFiltersCount > 0 && (
+              <div className="flex justify-end pt-1">
+                <button
+                  onClick={() => {
+                    setStatusFilter("all");
+                    setSourceFilter("all");
+                    setPriorityFilter("all");
+                    setSelectedTag(null);
+                    setSearchQuery("");
+                    setShowMobileFilters(false);
+                    showToast("Todos os filtros foram redefinidos!", "info");
+                  }}
+                  className="text-[10px] font-medium font-mono text-rose-500 hover:text-rose-600 flex items-center gap-1 cursor-pointer hover:underline"
+                >
+                  <X className="w-3 h-3" />
+                  Limpar Filtros ({activeFiltersCount})
+                </button>
+              </div>
+            )}
+
+          </div>
 
         </section>
 
@@ -2290,13 +2468,13 @@ export default function Home() {
       </main>
 
       {/* MOBILE BOTTOM NAVIGATION */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 md:hidden bg-white/90 backdrop-blur-md border-t border-slate-200/50 flex justify-around items-center py-2 px-4 shadow-lg pb-safe">
+      <div className="fixed bottom-0 left-0 right-0 z-40 md:hidden bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-t border-slate-200/60 dark:border-slate-800/80 flex justify-around items-center py-2.5 px-4 shadow-lg pb-[max(12px,env(safe-area-inset-bottom))]">
         <button
           onClick={() => setMobileTab("projects")}
           className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
             mobileTab === "projects" 
-              ? "text-slate-900 font-semibold scale-105" 
-              : "text-slate-400 hover:text-slate-600"
+              ? "text-slate-900 dark:text-white font-semibold scale-105" 
+              : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-400"
           }`}
         >
           <FolderDot className="w-5 h-5" />
@@ -2307,8 +2485,8 @@ export default function Home() {
           onClick={() => setMobileTab("stats")}
           className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
             mobileTab === "stats" 
-              ? "text-slate-900 font-semibold scale-105" 
-              : "text-slate-400 hover:text-slate-600"
+              ? "text-slate-900 dark:text-white font-semibold scale-105" 
+              : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-400"
           }`}
         >
           <BarChart2 className="w-5 h-5" />
@@ -2327,8 +2505,8 @@ export default function Home() {
           }}
           className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all cursor-pointer ${
             mobileTab === "settings" 
-              ? "text-slate-900 font-semibold scale-105" 
-              : "text-slate-400 hover:text-slate-600"
+              ? "text-slate-900 dark:text-white font-semibold scale-105" 
+              : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-400"
           }`}
         >
           <Sliders className="w-5 h-5" />
@@ -2343,10 +2521,10 @@ export default function Home() {
           animate={{ scale: 1, opacity: 1 }}
           whileTap={{ scale: 0.9 }}
           onClick={() => setIsNewProjectModalOpen(true)}
-          className="fixed bottom-20 right-5 z-40 md:hidden w-12 h-12 rounded-full bg-slate-900 text-white flex items-center justify-center shadow-lg active:bg-slate-800 transition-colors cursor-pointer"
+          className="fixed bottom-[calc(76px+max(12px,env(safe-area-inset-bottom)))] right-5 z-40 md:hidden w-12 h-12 rounded-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 flex items-center justify-center shadow-lg active:bg-slate-800 dark:active:bg-slate-100 transition-colors cursor-pointer"
           title="Novo Projeto"
         >
-          <Plus className="w-6 h-6 text-white" />
+          <Plus className="w-6 h-6" />
         </motion.button>
       )}
 
